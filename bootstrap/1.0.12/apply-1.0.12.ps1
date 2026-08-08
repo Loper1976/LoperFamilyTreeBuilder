@@ -24,13 +24,16 @@ Replace-Exact 'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs' 'pri
 Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Program.cs' 'version = "1.0.11"' 'version = "1.0.12"'
 
 # Register diagnostics service.
-Replace-Exact 'src/LoperFamilyTreeBuilder.Data/ServiceCollectionExtensions.cs' '        services.AddScoped<HostingReadinessService>();' "        services.AddScoped<HostingReadinessService>();`r`n        services.AddScoped<SystemDiagnosticsService>();"
+$serviceRegistration = '        services.AddScoped<HostingReadinessService>();' + "`r`n" + '        services.AddScoped<SystemDiagnosticsService>();'
+Replace-Exact 'src/LoperFamilyTreeBuilder.Data/ServiceCollectionExtensions.cs' '        services.AddScoped<HostingReadinessService>();' $serviceRegistration
 
 # Add diagnostics to Dashboard quick actions.
-Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/Home.razor' '            <a href="/backup">Create Manual Backup</a>' "            <a href=\"/backup\">Create Manual Backup</a>`r`n            <a href=\"/diagnostics\">Run System Diagnostics</a>"
+$dashboardActions = '            <a href="/backup">Create Manual Backup</a>' + "`r`n" + '            <a href="/diagnostics">Run System Diagnostics</a>'
+Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/Home.razor' '            <a href="/backup">Create Manual Backup</a>' $dashboardActions
 
 # Add diagnostics and version pages to System navigation.
-Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Layout/NavMenu.razor' '        <NavLink href="/hosting">Hosted Deployment</NavLink>' "        <NavLink href=\"/hosting\">Hosted Deployment</NavLink>`r`n        <NavLink href=\"/diagnostics\">System Diagnostics</NavLink>`r`n        <NavLink href=\"/about\">About / Version</NavLink>"
+$systemNavigation = '        <NavLink href="/hosting">Hosted Deployment</NavLink>' + "`r`n" + '        <NavLink href="/diagnostics">System Diagnostics</NavLink>' + "`r`n" + '        <NavLink href="/about">About / Version</NavLink>'
+Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Layout/NavMenu.razor' '        <NavLink href="/hosting">Hosted Deployment</NavLink>' $systemNavigation
 
 # Copy complete 1.0.12 new-source overrides into the reconstructed tree.
 $overrideRoot = Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.0.12/overrides'
