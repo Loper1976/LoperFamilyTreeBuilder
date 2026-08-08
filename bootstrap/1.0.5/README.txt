@@ -1,0 +1,1 @@
+1.0.5 cumulative medical/family-health override. Apply after verified 1.0.4. It adds structured private medical history, evidence status, events, cause-of-death, medical evidence links, family-health patterns, medical search/pedigree, and medical safeguards/tests. Living-person medical records default to private. The module does not diagnose or infer hereditary causation.
