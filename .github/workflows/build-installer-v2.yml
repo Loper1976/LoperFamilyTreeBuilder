@@ -91,6 +91,19 @@ jobs:
           $setupText = $setupText.Replace('WixToolset.Bal.wixext" Version="7.0.0', 'WixToolset.Bal.wixext" Version="5.0.0')
           Set-Content -Path $setupProject -Value $setupText -Encoding utf8
 
+      - name: Set V2 installer version
+        shell: pwsh
+        run: |
+          $packagePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
+          $packageText = Get-Content $packagePath -Raw
+          $packageText = $packageText.Replace('Version="1.0.0"', 'Version="1.0.1"')
+          Set-Content -Path $packagePath -Value $packageText -Encoding utf8
+
+          $bundlePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
+          $bundleText = Get-Content $bundlePath -Raw
+          $bundleText = $bundleText.Replace('Version="1.0.0.0"', 'Version="1.0.1.0"')
+          Set-Content -Path $bundlePath -Value $bundleText -Encoding utf8
+
       - name: Fix WiX shortcut component scope
         shell: pwsh
         run: |
