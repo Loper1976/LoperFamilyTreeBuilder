@@ -88,7 +88,21 @@ jobs:
       - name: Apply cumulative 1.0.4 GEDCOM and data-quality package
         shell: pwsh
         run: |
-          $parts = 0..7 | ForEach-Object { "bootstrap/1.0.4/part{0:D2}.bin" -f $_ }
+          $parts = @(
+            'bootstrap/1.0.4/part00.bin',
+            'bootstrap/1.0.4/part01.bin',
+            'bootstrap/1.0.4/part02.bin',
+            'bootstrap/1.0.4/part03.bin',
+            'bootstrap/1.0.4/part04.bin',
+            'bootstrap/1.0.4/part05.bin',
+            'bootstrap/1.0.4/part06.bin',
+            'bootstrap/1.0.4/part07a.bin',
+            'bootstrap/1.0.4/part07b.bin',
+            'bootstrap/1.0.4/part07c.bin',
+            'bootstrap/1.0.4/part07d.bin',
+            'bootstrap/1.0.4/part07e.bin',
+            'bootstrap/1.0.4/part07f.bin'
+          )
           $out = [IO.File]::Create('override-1.0.4.zip')
           try {
             foreach ($part in $parts) {
