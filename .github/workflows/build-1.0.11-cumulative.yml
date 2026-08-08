@@ -111,9 +111,12 @@ jobs:
       - name: Apply 1.0.10 Backup Recovery and Production Hardening package
         shell: pwsh
         run: |
-          $s=''
-          Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\1.0.10" -Filter 'part*.b64' | Sort-Object Name | ForEach-Object { $s += (Get-Content $_.FullName -Raw).Trim() }
-          if ($s.Length -ne 32896) { throw "1.0.10 base64 length mismatch: $($s.Length)" }
+          $p0=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part00.b64" -Raw).Trim()
+          if ($p0.Length -lt 12000) { throw "1.0.10 part00 is incomplete: $($p0.Length)" }
+          $s=$p0.Substring(0,12000)
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part01.b64" -Raw).Trim()
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part02.b64" -Raw).Trim()
+          if ($s.Length -ne 32896) { throw "1.0.10 base64 length mismatch after normalization: $($s.Length)" }
           [IO.File]::WriteAllBytes('110.zip',[Convert]::FromBase64String($s))
           $hash=(Get-FileHash 110.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne '909cf1a29817417fe35f59ef50db087844ad44096fa79b044aac403d8b3c908d') { throw "1.0.10 hash mismatch: $hash" }
@@ -130,9 +133,12 @@ jobs:
       - name: Apply 1.0.11 Hosted Deployment Readiness package
         shell: pwsh
         run: |
-          $s=''
-          Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\1.0.11" -Filter 'part*.b64' | Sort-Object Name | ForEach-Object { $s += (Get-Content $_.FullName -Raw).Trim() }
-          if ($s.Length -ne 24836) { throw "1.0.11 base64 length mismatch: $($s.Length)" }
+          $s=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part00.b64" -Raw).Trim()
+          $p1=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part01.b64" -Raw).Trim()
+          if ($p1.Length -lt 12000) { throw "1.0.11 part01 is incomplete: $($p1.Length)" }
+          $s += $p1.Substring(0,12000)
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part02.b64" -Raw).Trim()
+          if ($s.Length -ne 24836) { throw "1.0.11 base64 length mismatch after normalization: $($s.Length)" }
           [IO.File]::WriteAllBytes('111.zip',[Convert]::FromBase64String($s))
           $hash=(Get-FileHash 111.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne 'f15ef8ff1485305dc28bedd2767a44991036402c9579a56eb5335616dac5ceb9') { throw "1.0.11 hash mismatch: $hash" }
