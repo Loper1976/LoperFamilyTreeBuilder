@@ -1,0 +1,57 @@
+name: Repair 1.0.11 source chunk
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.11 ]
+    paths:
+      - '.github/workflows/repair-1.0.11-part01.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: cumulative-1.0.11
+
+      - name: Reconstruct and verify exact 1.0.11 part01
+        shell: pwsh
+        run: |
+          $part01 = ''
+          foreach ($p in @(
+            'bootstrap/1.0.11/fix01a1.b64',
+            'bootstrap/1.0.11/fix01a2_0.b64',
+            'bootstrap/1.0.11/fix01a2_1.b64',
+            'bootstrap/1.0.11/fix01a2_2.b64',
+            'bootstrap/1.0.11/fix01b.b64'
+          )) {
+            $part01 += (Get-Content $p -Raw).Trim()
+          }
+          if ($part01.Length -ne 12000) { throw "Reconstructed part01 length mismatch: $($part01.Length)" }
+
+          $all = (Get-Content 'bootstrap/1.0.11/part00.b64' -Raw).Trim() + $part01 + (Get-Content 'bootstrap/1.0.11/part02.b64' -Raw).Trim()
+          if ($all.Length -ne 24836) { throw "1.0.11 package length mismatch: $($all.Length)" }
+          [IO.File]::WriteAllBytes('verify-111.zip',[Convert]::FromBase64String($all))
+          $hash = (Get-FileHash 'verify-111.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'f15ef8ff1485305dc28bedd2767a44991036402c9579a56eb5335616dac5ceb9') { throw "1.0.11 package hash mismatch: $hash" }
+
+          Set-Content 'bootstrap/1.0.11/part01.b64' -Value $part01 -NoNewline -Encoding ascii
+          Write-Host "Verified 1.0.11 source package SHA256: $hash"
+
+      - name: Commit corrected source chunk
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bootstrap/1.0.11/part01.b64
+          if git diff --cached --quiet; then
+            echo "No repair commit required."
+          else
+            git commit -m "Repair exact cumulative 1.0.11 source chunk"
+            git push origin HEAD:cumulative-1.0.11
+          fi
