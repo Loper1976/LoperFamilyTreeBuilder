@@ -6,7 +6,9 @@ on:
     branches: [ person-profile-phase4 ]
     paths:
       - '.github/workflows/build-phase4b.yml'
-      - 'bootstrap/phase4/**'
+      - 'bootstrap/phase4exact/**'
+      - 'bootstrap/phase4/phase4.part02.b64'
+      - 'bootstrap/phase4/phase4.part03.b64'
 
 jobs:
   build:
@@ -48,22 +50,27 @@ jobs:
         run: |
           "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-      - name: Apply repository Phase 4 Person Profile package
+      - name: Apply exact verified Phase 4 Person Profile package
         shell: pwsh
         run: |
           $base64 = ''
           foreach ($part in @(
-            'bootstrap/phase4/phase4.part01.b64',
+            'bootstrap/phase4exact/part01a.b64',
+            'bootstrap/phase4exact/part01b.b64',
+            'bootstrap/phase4exact/part01c.b64',
+            'bootstrap/phase4exact/part01d.b64',
+            'bootstrap/phase4exact/part01e.b64',
             'bootstrap/phase4/phase4.part02.b64',
             'bootstrap/phase4/phase4.part03.b64'
           )) {
             $base64 += (Get-Content $part -Raw).Trim()
           }
           [IO.File]::WriteAllBytes('phase4-override.zip',[Convert]::FromBase64String($base64))
-          $expected = '26538500ecf3843df4c3355a6e54dafd92ce927834407f7bf980e068fa3726ba'
+          $expected = 'dc8643fab3ccfc504e814991e748e332c0fc17a16af5e0e9fe00fdee0d800281'
           $actual = (Get-FileHash phase4-override.zip -Algorithm SHA256).Hash.ToLowerInvariant()
-          Write-Host "Phase 4 repository SHA256: $actual"
-          if ($actual -ne $expected) { throw 'Phase 4 repository package changed unexpectedly.' }
+          Write-Host "Phase 4 expected SHA256: $expected"
+          Write-Host "Phase 4 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw 'Phase 4 exact package failed SHA-256 verification.' }
           Expand-Archive phase4-override.zip -DestinationPath $env:SOURCE_ROOT -Force
 
       - name: Setup .NET 10
