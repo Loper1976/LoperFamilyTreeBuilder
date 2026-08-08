@@ -1,0 +1,173 @@
+name: Build exact cumulative 1.0.8 installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.8 ]
+    paths:
+      - '.github/workflows/build-1.0.8-exact.yml'
+      - 'bootstrap/exact108/**'
+      - 'bootstrap/c106safe/**'
+      - 'bootstrap/cumulative107/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create known-good step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.0.5-final-clean.yml'
+          if (-not (Test-Path $workflow)) { throw "Known-good 1.0.5 workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepLine = "- name: $Name"
+          $stepIndex = -1
+          for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq $stepLine) { $stepIndex = $i; break }
+          }
+          if ($stepIndex -lt 0) { throw "Step '$Name' was not found in the known-good workflow." }
+          $runIndex = -1
+          for ($i = $stepIndex + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            if ($lines[$i].Trim() -eq 'run: |') { $runIndex = $i; break }
+          }
+          if ($runIndex -lt 0) { throw "Step '$Name' does not contain a block run script." }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i = $runIndex + 1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line = $lines[$i]
+            if ($line.StartsWith('          ')) { $line = $line.Substring(10) }
+            elseif ($line.Trim().Length -gt 0) { $line = $line.TrimStart() }
+            $block.Add($line)
+          }
+          $script = $block -join "`n"
+          Write-Host "Running verified 1.0.5 workflow step: $Name"
+          & ([ScriptBlock]::Create($script))
+          if (-not $?) { throw "Known-good step '$Name' failed." }
+          '@ | Set-Content -Path "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" -Encoding utf8
+
+      - name: Reassemble verified cumulative 1.0.5 foundation
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Reassemble verified 1.0.3 source foundation'
+          $root = "$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3"
+          if (-not (Test-Path $root)) { throw "Expected source root was not created: $root" }
+          "SOURCE_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Apply verified cumulative 1.0.4 and 1.0.5 packages'
+
+      - name: Apply verified 1.0.6 package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in (Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\c106safe" -Filter 'part*.b64' | Sort-Object Name)) {
+            $base64 += (Get-Content $part.FullName -Raw).Trim()
+          }
+          if ($base64.Length -ne 24040) { throw "1.0.6 base64 length mismatch: $($base64.Length)" }
+          [IO.File]::WriteAllBytes('delta-1.0.6.zip',[Convert]::FromBase64String($base64))
+          $actual = (Get-FileHash 'delta-1.0.6.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '8449a7970715fc8c0153df95f4d94a4e4eef09fbde52ba6550ad86e11c9a423c') { throw "1.0.6 verification failed: $actual" }
+          Expand-Archive 'delta-1.0.6.zip' -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Apply verified 1.0.7 package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @('bootstrap/cumulative107/part00.b64','bootstrap/cumulative107/part01.b64','bootstrap/cumulative107/part02.b64')) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
+          if ($base64.Length -ne 41560) { throw "1.0.7 base64 length mismatch: $($base64.Length)" }
+          [IO.File]::WriteAllBytes('delta-1.0.7.zip',[Convert]::FromBase64String($base64))
+          $actual = (Get-FileHash 'delta-1.0.7.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne 'fb2521bbe7f691e523ed5ccf4cba92f659e69f249cf72b067bbe58acb9266249') { throw "1.0.7 verification failed: $actual" }
+          Expand-Archive 'delta-1.0.7.zip' -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Apply exact verified 1.0.8 package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/exact108/part00.b64',
+            'bootstrap/exact108/part01.b64',
+            'bootstrap/exact108/part02a.b64',
+            'bootstrap/exact108/part02b.b64',
+            'bootstrap/exact108/part02c.b64',
+            'bootstrap/exact108/part02d.b64'
+          )) { $base64 += (Get-Content $part -Raw).Trim() }
+          if ($base64.Length -ne 41544) { throw "1.0.8 base64 length mismatch: $($base64.Length)" }
+          [IO.File]::WriteAllBytes('delta-1.0.8.zip',[Convert]::FromBase64String($base64))
+          $actual = (Get-FileHash 'delta-1.0.8.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "1.0.8 source SHA256: $actual"
+          if ($actual -ne 'bc58f0ebd041d190d1ee01b139de0b78937238afe01151f9a3cfa4f1e707ea2d') { throw "1.0.8 verification failed: $actual" }
+          Expand-Archive 'delta-1.0.8.zip' -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Verify direct 1.0.2 to 1.0.8 upgrade contract
+        shell: pwsh
+        run: |
+          $msi = Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+          $bundle = Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $props = Get-Content "$env:SOURCE_ROOT\Directory.Build.props" -Raw
+          if ($msi -notmatch '1\.0\.8') { throw 'MSI product version is not 1.0.8.' }
+          if ($msi -notmatch '4BDBF4F0-7C82-4FA5-B0B0-6E6CA04E80E9') { throw 'MSI UpgradeCode changed.' }
+          if ($bundle -notmatch '1\.0\.8\.0') { throw 'Bundle version is not 1.0.8.0.' }
+          if ($bundle -notmatch 'B90A31E4-FA5B-4DDC-8802-8D07E4206C1F') { throw 'Bundle UpgradeCode changed.' }
+          if ($props -notmatch '<Version>1\.0\.8</Version>') { throw 'Application version is not 1.0.8.' }
+          if (-not (Test-Path "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Data\Migrations\20260808080000_CemeteryMilitaryStoriesTimeline.cs")) { throw '1.0.7 migration missing.' }
+          if (-not (Test-Path "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Data\Migrations\20260808090000_UsersCollaborationPrivacy.cs")) { throw '1.0.8 migration missing.' }
+          if (-not (Test-Path "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs")) { throw 'Pre-upgrade backup service missing.' }
+          $launcherProgram = Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\Program.cs" -Raw
+          if ($launcherProgram -notmatch 'UpgradeBackupService') { throw 'Launcher backup wiring missing.' }
+          Write-Host 'Direct 1.0.2 to 1.0.8 upgrade contract verified.'
+
+      - name: Run full cumulative tests and build
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+
+      - name: Publish cumulative application
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Publish cumulative application'
+
+      - name: Download LocalDB prerequisite
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Download LocalDB prerequisite'
+
+      - name: Build clean WiX 1.0.8 installer
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Force clean WiX 1.0.5 build'
+
+      - name: Verify final installer reports 1.0.8
+        shell: pwsh
+        run: |
+          $setup = "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if (-not (Test-Path $setup)) { throw "Final installer was not found: $setup" }
+          $info = [Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          Write-Host "ProductVersion: $($info.ProductVersion)"
+          if ($info.ProductVersion -notmatch '^1\.0\.8') { throw "Final installer ProductVersion is not 1.0.8: $($info.ProductVersion)" }
+          Get-FileHash $setup -Algorithm SHA256
+
+      - name: Upload cumulative 1.0.8 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.0.8-cumulative-final
+          path: artifacts/final/LoperFamilyTreeBuilderSetup.exe
+          if-no-files-found: error
