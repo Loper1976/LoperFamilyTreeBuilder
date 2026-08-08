@@ -1,0 +1,113 @@
+name: Export reconstructed 1.0.11 source for 1.0.12
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.12-source-final ]
+    paths:
+      - '.github/workflows/export-1.0.11-for-1.0.12.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create known-good foundation runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.0.5-final-clean.yml'
+          if (-not (Test-Path $workflow)) { throw "Known-good workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break }
+          }
+          if ($stepIndex -lt 0) { throw "Known-good step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break }
+          }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) }
+            elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "Known-good step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" -Encoding utf8
+
+      - name: Reconstruct cumulative 1.0.11 source
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Reassemble verified 1.0.3 source foundation'
+          $root="$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3"
+          if (-not (Test-Path $root)) { throw "Expected source root was not created: $root" }
+          & "$env:GITHUB_WORKSPACE\Invoke-KnownGoodStep.ps1" 'Apply verified cumulative 1.0.4 and 1.0.5 packages'
+
+          $s=''
+          Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\c106safe" -Filter 'part*.b64' | Sort-Object Name | ForEach-Object { $s += (Get-Content $_.FullName -Raw).Trim() }
+          [IO.File]::WriteAllBytes('106.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 106.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '8449a7970715fc8c0153df95f4d94a4e4eef09fbde52ba6550ad86e11c9a423c') { throw '1.0.6 verification failed.' }
+          Expand-Archive 106.zip -DestinationPath $root -Force
+
+          $s=''
+          foreach($p in @('bootstrap/cumulative107/part00.b64','bootstrap/cumulative107/part01.b64','bootstrap/cumulative107/part02.b64')) { $s += (Get-Content $p -Raw).Trim() }
+          [IO.File]::WriteAllBytes('107.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 107.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'fb2521bbe7f691e523ed5ccf4cba92f659e69f249cf72b067bbe58acb9266249') { throw '1.0.7 verification failed.' }
+          Expand-Archive 107.zip -DestinationPath $root -Force
+
+          $s=''
+          foreach($p in @('bootstrap/exact108/part00.b64','bootstrap/exact108/part01.b64','bootstrap/exact108/part02a.b64','bootstrap/exact108/part02b.b64','bootstrap/exact108/part02c1.b64','bootstrap/exact108/part02c2.b64','bootstrap/exact108/part02d.b64')) { $s += (Get-Content $p -Raw).Trim() }
+          [IO.File]::WriteAllBytes('108.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 108.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'bc58f0ebd041d190d1ee01b139de0b78937238afe01151f9a3cfa4f1e707ea2d') { throw '1.0.8 verification failed.' }
+          Expand-Archive 108.zip -DestinationPath $root -Force
+          Copy-Item 'bootstrap/overrides108/Users.razor' "$root\src\LoperFamilyTreeBuilder.Web\Components\Pages\Users.razor" -Force
+          Copy-Item 'bootstrap/overrides108/GlobalUsings.cs' "$root\tests\LoperFamilyTreeBuilder.Tests\GlobalUsings.cs" -Force
+
+          $s=''
+          Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\1.0.9" -Filter 'part*.b64' | Sort-Object Name | ForEach-Object { $s += (Get-Content $_.FullName -Raw).Trim() }
+          [IO.File]::WriteAllBytes('109.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 109.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'a94de90f6c90da561d64b0acd370d2e34e5b731862c9e28096e3149f63f8aaf5') { throw '1.0.9 verification failed.' }
+          Expand-Archive 109.zip -DestinationPath $root -Force
+
+          $p0=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part00.b64" -Raw).Trim()
+          $s=$p0.Substring(0,12000)
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part01.b64" -Raw).Trim()
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.10\part02.b64" -Raw).Trim()
+          [IO.File]::WriteAllBytes('110.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 110.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '909cf1a29817417fe35f59ef50db087844ad44096fa79b044aac403d8b3c908d') { throw '1.0.10 verification failed.' }
+          Expand-Archive 110.zip -DestinationPath $root -Force
+
+          $s=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part00.b64" -Raw).Trim()
+          $p1=(Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part01.b64" -Raw).Trim()
+          $s += $p1.Substring(0,12000)
+          $s += (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\1.0.11\part02.b64" -Raw).Trim()
+          [IO.File]::WriteAllBytes('111.zip',[Convert]::FromBase64String($s))
+          if ((Get-FileHash 111.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'f15ef8ff1485305dc28bedd2767a44991036402c9579a56eb5335616dac5ceb9') { throw '1.0.11 verification failed.' }
+          Expand-Archive 111.zip -DestinationPath $root -Force
+
+          "SOURCE_ROOT=$root" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Package source
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:SOURCE_ROOT\*" -DestinationPath "$env:GITHUB_WORKSPACE\LoperFamilyTreeBuilder-1.0.11-source-for-1.0.12.zip" -Force
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.0.11-source-for-1.0.12
+          path: LoperFamilyTreeBuilder-1.0.11-source-for-1.0.12.zip
+          if-no-files-found: error
