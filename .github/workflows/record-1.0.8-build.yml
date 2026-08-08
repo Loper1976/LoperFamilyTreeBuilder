@@ -1,0 +1,88 @@
+name: Record cumulative 1.0.8 build metadata
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.8 ]
+    paths:
+      - '.github/workflows/record-1.0.8-build.yml'
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  record:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: cumulative-1.0.8
+
+      - name: Wait for successful cumulative 1.0.8 artifact and record metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $artifact = $null
+          for ($attempt = 1; $attempt -le 60; $attempt++) {
+            $uri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts?name=LoperFamilyTreeBuilderSetup-1.0.8-cumulative&per_page=20"
+            $response = Invoke-RestMethod -Uri $uri -Headers $headers -Method Get
+            $artifact = $response.artifacts |
+              Where-Object { -not $_.expired -and $_.workflow_run.head_branch -eq 'cumulative-1.0.8' } |
+              Sort-Object created_at -Descending |
+              Select-Object -First 1
+            if ($artifact) { break }
+            Write-Host "Waiting for 1.0.8 artifact... attempt $attempt/60"
+            Start-Sleep -Seconds 10
+          }
+          if (-not $artifact) { throw 'Cumulative 1.0.8 artifact was not produced within the polling window.' }
+
+          $runUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/runs/$($artifact.workflow_run.id)"
+          $run = Invoke-RestMethod -Uri $runUri -Headers $headers -Method Get
+          if ($run.status -ne 'completed' -or $run.conclusion -ne 'success') {
+            throw "1.0.8 build run is not successful. Status=$($run.status) Conclusion=$($run.conclusion)"
+          }
+
+          $zipPath = Join-Path $env:RUNNER_TEMP 'LoperFamilyTreeBuilderSetup-1.0.8-cumulative.zip'
+          $downloadUri = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($artifact.id)/zip"
+          Invoke-WebRequest -Uri $downloadUri -Headers $headers -OutFile $zipPath
+          $extract = Join-Path $env:RUNNER_TEMP 'installer108'
+          Expand-Archive $zipPath -DestinationPath $extract -Force
+          $exe = Get-ChildItem $extract -Filter 'LoperFamilyTreeBuilderSetup.exe' -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'Installer EXE not found inside artifact.' }
+          $hash = (Get-FileHash $exe.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          $version = [Diagnostics.FileVersionInfo]::GetVersionInfo($exe.FullName)
+          if ($version.ProductVersion -notmatch '^1\.0\.8') { throw "Artifact installer is not version 1.0.8: $($version.ProductVersion)" }
+
+          New-Item -ItemType Directory -Force 'builds' | Out-Null
+          $metadata = [ordered]@{
+            version = '1.0.8'
+            artifact_id = [long]$artifact.id
+            artifact_name = $artifact.name
+            artifact_digest = $artifact.digest
+            artifact_size_bytes = [long]$artifact.size_in_bytes
+            workflow_run_id = [long]$run.id
+            workflow_run_conclusion = $run.conclusion
+            workflow_head_sha = $run.head_sha
+            installer_file = 'LoperFamilyTreeBuilderSetup.exe'
+            installer_sha256 = $hash
+            installer_product_version = $version.ProductVersion
+            installer_file_version = $version.FileVersion
+            upgrade_from = @('1.0.2','1.0.3','1.0.4','1.0.5','1.0.6','1.0.7')
+            recorded_utc = [DateTime]::UtcNow.ToString('o')
+          }
+          $metadata | ConvertTo-Json -Depth 4 | Set-Content 'builds/1.0.8.json' -Encoding utf8
+          Get-Content 'builds/1.0.8.json'
+
+          git config user.name 'Loper Family Tree Builder CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add builds/1.0.8.json
+          git commit -m 'Record successful cumulative 1.0.8 installer build'
+          git push origin HEAD:cumulative-1.0.8
