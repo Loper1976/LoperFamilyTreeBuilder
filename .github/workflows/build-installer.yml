@@ -83,34 +83,34 @@ jobs:
         shell: pwsh
         run: |
           $importsPath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\_Imports.razor"
-          $imports = Get-Content $importsPath -Raw
-          if ($imports -notmatch 'RenderMode') {
+          $importsText = Get-Content $importsPath -Raw
+          if ($importsText -notmatch 'RenderMode') {
             Add-Content -Path $importsPath -Value '@using static Microsoft.AspNetCore.Components.Web.RenderMode' -Encoding utf8
           }
 
           $homePath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Home.razor"
-          $home = Get-Content $homePath -Raw
-          $home = $home.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
+          $homeText = Get-Content $homePath -Raw
+          $homeText = $homeText.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
           $homeMarker = '    private void OpenPeopleSearch()'
           $homeInsert = "    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private void OpenPeopleSearch()"
-          $home = $home.Replace($homeMarker, $homeInsert)
-          Set-Content -Path $homePath -Value $home -Encoding utf8
+          $homeText = $homeText.Replace($homeMarker, $homeInsert)
+          Set-Content -Path $homePath -Value $homeText -Encoding utf8
 
           $peoplePath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\People.razor"
-          $people = Get-Content $peoplePath -Raw
-          $people = $people.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
+          $peopleText = Get-Content $peoplePath -Raw
+          $peopleText = $peopleText.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
           $peopleMarker = '    private static string FormatDate(DateOnly? date)'
           $peopleInsert = "    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private static string FormatDate(DateOnly? date)"
-          $people = $people.Replace($peopleMarker, $peopleInsert)
-          Set-Content -Path $peoplePath -Value $people -Encoding utf8
+          $peopleText = $peopleText.Replace($peopleMarker, $peopleInsert)
+          Set-Content -Path $peoplePath -Value $peopleText -Encoding utf8
 
           $addPath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\AddPerson.razor"
-          $add = Get-Content $addPath -Raw
-          $add = $add.Replace('@onclick="() => Navigation.NavigateTo("/people")"', '@onclick="Cancel"')
+          $addText = Get-Content $addPath -Raw
+          $addText = $addText.Replace('@onclick="() => Navigation.NavigateTo("/people")"', '@onclick="Cancel"')
           $addMarker = '    private CreatePersonRequest ToRequest()'
           $addInsert = "    private void Cancel()`r`n    {`r`n        Navigation.NavigateTo(`"/people`");`r`n    }`r`n`r`n    private CreatePersonRequest ToRequest()"
-          $add = $add.Replace($addMarker, $addInsert)
-          Set-Content -Path $addPath -Value $add -Encoding utf8
+          $addText = $addText.Replace($addMarker, $addInsert)
+          Set-Content -Path $addPath -Value $addText -Encoding utf8
 
       - name: Restore tests
         shell: pwsh
