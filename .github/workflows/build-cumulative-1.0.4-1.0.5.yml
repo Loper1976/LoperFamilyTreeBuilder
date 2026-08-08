@@ -1,0 +1,203 @@
+name: Build cumulative 1.0.4 and 1.0.5 installers
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ medical-family-health-1.0.5 ]
+    paths:
+      - '.github/workflows/build-cumulative-1.0.4-1.0.5.yml'
+      - 'bootstrap/1.0.4/**'
+      - 'bootstrap/1.0.5/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reassemble verified Phase 3 baseline
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/source.part01.b64',
+            'bootstrap/source.part02.b64',
+            'bootstrap/source.part03.b64',
+            'bootstrap/source.part04.b64',
+            'bootstrap/source.part05.b64',
+            'bootstrap/source.part06.b64'
+          )) { $base64 += (Get-Content $part -Raw).Trim() }
+          $base64 += (Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+          $part7d = (Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          if ($part7d.Length -lt 4500) { throw 'Phase 3 source part 7d is incomplete.' }
+          $base64 += $part7d.Substring(0, 4500)
+          $base64 += (Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+          [IO.File]::WriteAllBytes('phase3.zip',[Convert]::FromBase64String($base64))
+          $expected = 'eed76fb56a914b1dfba9202053c7f1c3f50a089f1b70f1565157350693ae3cb4'
+          $actual = (Get-FileHash phase3.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Phase 3 source package failed SHA-256 verification.' }
+          Expand-Archive phase3.zip -DestinationPath source -Force
+
+      - name: Set source root
+        shell: pwsh
+        run: |
+          "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Reassemble verified 1.0.3 source
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/phase5small/chunk-00.b64',
+            'bootstrap/phase5small/chunk-01.b64',
+            'bootstrap/phase5small/chunk-02.b64',
+            'bootstrap/phase5fix/fix-00.b64',
+            'bootstrap/phase5fix/fix01-0.b64',
+            'bootstrap/phase5fix/fix01-1.b64',
+            'bootstrap/phase5fix/fix-02.b64',
+            'bootstrap/phase5fix/fix-03.b64',
+            'bootstrap/phase5fix/fix04-0.b64',
+            'bootstrap/phase5fix/fix04-1.b64',
+            'bootstrap/phase5fix/fix-05.b64',
+            'bootstrap/phase5fix/pair-06-07.b64',
+            'bootstrap/phase5fix/pair-08-09.b64',
+            'bootstrap/phase5fix/pair1011-0.b64',
+            'bootstrap/phase5fix/pair1011-1.b64',
+            'bootstrap/phase5fix/pair1011-2.b64',
+            'bootstrap/phase5fix/pair1011-3.b64',
+            'bootstrap/phase5fix/pair-12-13.b64',
+            'bootstrap/phase5/part05.b64',
+            'bootstrap/phase5/part06.b64',
+            'bootstrap/phase5/part07.b64'
+          )) { $base64 += (Get-Content $part -Raw).Trim() }
+          [IO.File]::WriteAllBytes('phase5-1.0.3.zip',[Convert]::FromBase64String($base64))
+          $expected = '612167ab668886baa94ba614325c9fd758f9330c05a9fc46be70c06389300c59'
+          $actual = (Get-FileHash phase5-1.0.3.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Verified 1.0.3 source package failed SHA-256 verification.' }
+          Expand-Archive phase5-1.0.3.zip -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Apply cumulative 1.0.4 GEDCOM and data-quality package
+        shell: pwsh
+        run: |
+          $parts = 0..7 | ForEach-Object { "bootstrap/1.0.4/part{0:D2}.bin" -f $_ }
+          $out = [IO.File]::Create('override-1.0.4.zip')
+          try {
+            foreach ($part in $parts) {
+              $bytes = [IO.File]::ReadAllBytes($part)
+              $out.Write($bytes, 0, $bytes.Length)
+            }
+          } finally { $out.Dispose() }
+          $expected = '4059d9f42af452c0c6271837290b0767e8533290de8939e6833b78744597d586'
+          $actual = (Get-FileHash override-1.0.4.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "1.0.4 expected SHA256: $expected"
+          Write-Host "1.0.4 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw '1.0.4 package failed SHA-256 verification.' }
+          Expand-Archive override-1.0.4.zip -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: 1.0.4 restore and test checkpoint
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+
+      - name: 1.0.4 publish checkpoint
+        shell: pwsh
+        run: |
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release -r win-x64 --self-contained true -o "$env:GITHUB_WORKSPACE\artifacts\104\publish\Web"
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -r win-x64 --self-contained true -p:EnableWindowsTargeting=true -o "$env:GITHUB_WORKSPACE\artifacts\104\publish\Launcher"
+
+      - name: Download SQL Server LocalDB installation media once
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\common\sqlmedia" | Out-Null
+          Invoke-WebRequest -Uri 'https://download.microsoft.com/download/5/1/4/5145fe04-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe' -OutFile "$env:GITHUB_WORKSPACE\artifacts\common\SQL2022-SSEI-Expr.exe"
+          $mediaPath = "$env:GITHUB_WORKSPACE\artifacts\common\sqlmedia"
+          $args = @('/Action=Download','/MediaType=LocalDB',"/MediaPath=$mediaPath",'/Quiet')
+          $p = Start-Process -FilePath "$env:GITHUB_WORKSPACE\artifacts\common\SQL2022-SSEI-Expr.exe" -ArgumentList $args -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "SQL media download failed: $($p.ExitCode)" }
+          $localDb = Get-ChildItem $mediaPath -Filter SqlLocalDB.msi -Recurse | Select-Object -First 1
+          if (-not $localDb) { throw 'SqlLocalDB.msi was not found.' }
+          Copy-Item $localDb.FullName "$env:GITHUB_WORKSPACE\artifacts\common\SqlLocalDB.msi" -Force
+
+      - name: Build 1.0.4 installer checkpoint
+        shell: pwsh
+        run: |
+          $payload = "$env:GITHUB_WORKSPACE\artifacts\104\payload"
+          New-Item -ItemType Directory -Force "$payload\app\Web" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\104\publish\Web\*" "$payload\app\Web" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\104\publish\Launcher\*" "$payload\app" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\common\SqlLocalDB.msi" "$payload\SqlLocalDB.msi" -Force
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$payload" -o "$env:GITHUB_WORKSPACE\artifacts\104\msi"
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\104\msi\LoperFamilyTreeBuilder.msi" "$payload\LoperFamilyTreeBuilder.msi" -Force
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$payload" -o "$env:GITHUB_WORKSPACE\artifacts\104\setup"
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\104\final" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\104\setup\LoperFamilyTreeBuilderSetup.exe" "$env:GITHUB_WORKSPACE\artifacts\104\final\LoperFamilyTreeBuilderSetup.exe" -Force
+          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\104\final\LoperFamilyTreeBuilderSetup.exe" -Algorithm SHA256
+
+      - name: Upload 1.0.4 checkpoint installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.0.4-checkpoint
+          path: artifacts/104/final/LoperFamilyTreeBuilderSetup.exe
+          if-no-files-found: error
+
+      - name: Apply cumulative 1.0.5 Medical and Family Health package
+        shell: pwsh
+        run: |
+          $parts = 0..9 | ForEach-Object { "bootstrap/1.0.5/part{0:D2}.bin" -f $_ }
+          $out = [IO.File]::Create('override-1.0.5.zip')
+          try {
+            foreach ($part in $parts) {
+              $bytes = [IO.File]::ReadAllBytes($part)
+              $out.Write($bytes, 0, $bytes.Length)
+            }
+          } finally { $out.Dispose() }
+          $expected = '97812fed241307c30c25e86f3eedd585b746298fa747192cf677e8804b3b522d'
+          $actual = (Get-FileHash override-1.0.5.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "1.0.5 expected SHA256: $expected"
+          Write-Host "1.0.5 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw '1.0.5 package failed SHA-256 verification.' }
+          Expand-Archive override-1.0.5.zip -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: 1.0.5 restore and full test checkpoint
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+
+      - name: Publish cumulative 1.0.5 application
+        shell: pwsh
+        run: |
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release -r win-x64 --self-contained true -o "$env:GITHUB_WORKSPACE\artifacts\105\publish\Web"
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -r win-x64 --self-contained true -p:EnableWindowsTargeting=true -o "$env:GITHUB_WORKSPACE\artifacts\105\publish\Launcher"
+
+      - name: Build cumulative 1.0.5 installer
+        shell: pwsh
+        run: |
+          $payload = "$env:GITHUB_WORKSPACE\artifacts\105\payload"
+          New-Item -ItemType Directory -Force "$payload\app\Web" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\105\publish\Web\*" "$payload\app\Web" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\105\publish\Launcher\*" "$payload\app" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\common\SqlLocalDB.msi" "$payload\SqlLocalDB.msi" -Force
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$payload" -o "$env:GITHUB_WORKSPACE\artifacts\105\msi"
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\105\msi\LoperFamilyTreeBuilder.msi" "$payload\LoperFamilyTreeBuilder.msi" -Force
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$payload" -o "$env:GITHUB_WORKSPACE\artifacts\105\setup"
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\105\final" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\105\setup\LoperFamilyTreeBuilderSetup.exe" "$env:GITHUB_WORKSPACE\artifacts\105\final\LoperFamilyTreeBuilderSetup.exe" -Force
+          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\105\final\LoperFamilyTreeBuilderSetup.exe" -Algorithm SHA256
+
+      - name: Upload cumulative 1.0.5 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.0.5-cumulative
+          path: artifacts/105/final/LoperFamilyTreeBuilderSetup.exe
+          if-no-files-found: error
