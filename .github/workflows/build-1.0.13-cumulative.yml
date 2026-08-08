@@ -1,0 +1,168 @@
+name: Build cumulative 1.0.13 from 1.0.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.13 ]
+    paths:
+      - '.github/workflows/build-1.0.13-cumulative.yml'
+      - 'bootstrap/1.0.13/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create previous-release step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.0.12-cumulative.yml'
+          if (-not (Test-Path $workflow)) { throw "1.0.12 workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break }
+          }
+          if ($stepIndex -lt 0) { throw "1.0.12 step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break }
+          }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) }
+            elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "1.0.12 step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" -Encoding utf8
+
+      - name: Create known-good foundation runner
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Create known-good foundation runner'
+
+      - name: Reconstruct verified cumulative 1.0.11 source
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Reconstruct verified cumulative 1.0.11 source'
+
+      - name: Apply verified 1.0.12 release candidate
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Apply 1.0.12 Validation and Release Candidate changes'
+
+      - name: Apply 1.0.13 Production Release Baseline
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.0.13\apply-1.0.13.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify direct 1.0.2 to 1.0.13 upgrade contract
+        shell: pwsh
+        run: |
+          $msi=Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+          $bundle=Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $props=Get-Content "$env:SOURCE_ROOT\Directory.Build.props" -Raw
+          $program=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Program.cs" -Raw
+          $launcher=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          if ($msi -notmatch '1\.0\.13' -or $msi -notmatch '4BDBF4F0-7C82-4FA5-B0B0-6E6CA04E80E9') { throw 'MSI direct-upgrade contract failed.' }
+          if ($bundle -notmatch '1\.0\.13\.0' -or $bundle -notmatch 'B90A31E4-FA5B-4DDC-8802-8D07E4206C1F') { throw 'Bundle direct-upgrade contract failed.' }
+          if ($props -notmatch '<Version>1\.0\.13</Version>') { throw 'Application version is not 1.0.13.' }
+          if ($launcher -notmatch 'TargetVersion = "1\.0\.13"') { throw 'Pre-upgrade backup target is not 1.0.13.' }
+          if ($program -notmatch 'version = "1\.0\.13"' -or $program -notmatch '/health/release') { throw '1.0.13 release-health wiring is incomplete.' }
+          foreach($required in @(
+            'src/LoperFamilyTreeBuilder.Core/Models/SystemDiagnosticsModels.cs',
+            'src/LoperFamilyTreeBuilder.Data/Services/SystemDiagnosticsService.cs',
+            'src/LoperFamilyTreeBuilder.Web/Components/Pages/SystemDiagnostics.razor',
+            'src/LoperFamilyTreeBuilder.Web/Components/Pages/ProductionRelease.razor',
+            'src/LoperFamilyTreeBuilder.Web/Components/Pages/About.razor'
+          )) { if (-not (Test-Path (Join-Path $env:SOURCE_ROOT $required))) { throw "Required production file missing: $required" } }
+          Write-Host 'Direct 1.0.2 to 1.0.13 upgrade contract verified.'
+
+      - name: Run production validation tests and builds
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+
+      - name: Verify preservation and recovery gates
+        shell: pwsh
+        run: |
+          $policy=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $identifier=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Core\Entities\PersonIdentifier.cs" -Raw
+          if ($policy -notmatch 'Legacy Number' -or $identifier -notmatch 'Deliberately do not trim, normalize, parse, renumber, or reformat') { throw 'Legacy Number preservation safeguards could not be verified.' }
+          foreach($required in @(
+            'src/LoperFamilyTreeBuilder.Data/Services/AdvancedBackupService.cs',
+            'src/LoperFamilyTreeBuilder.Launcher/RestoreManager.cs',
+            'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs'
+          )) { if (-not (Test-Path (Join-Path $env:SOURCE_ROOT $required))) { throw "Recovery component missing: $required" } }
+          Write-Host 'Preservation and recovery gates verified.'
+
+      - name: Publish Web and Launcher
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Publish Web and Launcher'
+
+      - name: Download LocalDB and assemble payload
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Download LocalDB and assemble payload'
+
+      - name: Build clean WiX 1.0.13 installer
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-PreviousReleaseStep.ps1" 'Build clean WiX 1.0.12 installer'
+
+      - name: Verify installer and create release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if (-not (Test-Path $setup)) { throw 'Final 1.0.13 installer was not found.' }
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          if ($info.ProductVersion -notmatch '^1\.0\.13') { throw "Installer ProductVersion is not 1.0.13: $($info.ProductVersion)" }
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $signature=Get-AuthenticodeSignature $setup
+          $manifest=[ordered]@{
+            application='Loper Family Tree Builder'
+            version='1.0.13'
+            release='Production Release Baseline'
+            sha256=$hash
+            authenticodeStatus=$signature.Status.ToString()
+            directUpgradeBaseline='1.0.2'
+            legacyNumberPreservationVerified=$true
+            cumulativeTestsPassed=$true
+            githubRunId=$env:GITHUB_RUN_ID
+            generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.0.13.json" -Encoding utf8
+          Write-Host "Installer SHA256: $hash"
+          Write-Host "Authenticode: $($signature.Status)"
+
+      - name: Upload cumulative 1.0.13 production baseline
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.0.13-cumulative-production
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.0.13.json
+          if-no-files-found: error
