@@ -1,0 +1,176 @@
+name: Build Phase 5 Sources Documents Photos Installer
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ sources-docs-photos-phase5 ]
+    paths:
+      - '.github/workflows/build-phase5.yml'
+      - 'bootstrap/phase5/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reassemble verified Phase 3 baseline
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/source.part01.b64',
+            'bootstrap/source.part02.b64',
+            'bootstrap/source.part03.b64',
+            'bootstrap/source.part04.b64',
+            'bootstrap/source.part05.b64',
+            'bootstrap/source.part06.b64'
+          )) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
+          $base64 += (Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+          $part7d = (Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          if ($part7d.Length -lt 4500) { throw 'Phase 3 source part 7d is incomplete.' }
+          $base64 += $part7d.Substring(0, 4500)
+          $base64 += (Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+          [IO.File]::WriteAllBytes('phase3.zip',[Convert]::FromBase64String($base64))
+          $expected = 'eed76fb56a914b1dfba9202053c7f1c3f50a089f1b70f1565157350693ae3cb4'
+          $actual = (Get-FileHash phase3.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Phase 3 expected SHA256: $expected"
+          Write-Host "Phase 3 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw 'Phase 3 source package failed SHA-256 verification.' }
+          Expand-Archive phase3.zip -DestinationPath source -Force
+
+      - name: Set source root
+        shell: pwsh
+        run: |
+          "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Apply exact verified Phase 4 Person Profile package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/phase4exact/part01a.b64',
+            'bootstrap/phase4exact/part01b.b64',
+            'bootstrap/phase4exact/part01c.b64',
+            'bootstrap/phase4exact/part01d.b64',
+            'bootstrap/phase4exact/part01e.b64',
+            'bootstrap/phase4/phase4.part02.b64',
+            'bootstrap/phase4/phase4.part03.b64'
+          )) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
+          [IO.File]::WriteAllBytes('phase4-override.zip',[Convert]::FromBase64String($base64))
+          $expected = 'dc8643fab3ccfc504e814991e748e332c0fc17a16af5e0e9fe00fdee0d800281'
+          $actual = (Get-FileHash phase4-override.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Phase 4 expected SHA256: $expected"
+          Write-Host "Phase 4 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw 'Phase 4 exact package failed SHA-256 verification.' }
+          Expand-Archive phase4-override.zip -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Apply verified Phase 5 Sources Documents Photos package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/phase5/part01.b64',
+            'bootstrap/phase5/part02.b64',
+            'bootstrap/phase5/part03.b64',
+            'bootstrap/phase5/part04.b64',
+            'bootstrap/phase5/part05.b64',
+            'bootstrap/phase5/part06.b64',
+            'bootstrap/phase5/part07.b64'
+          )) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
+          [IO.File]::WriteAllBytes('phase5-override.zip',[Convert]::FromBase64String($base64))
+          $expected = '612167ab668886baa94ba614325c9fd758f9330c05a9fc46be70c06389300c59'
+          $actual = (Get-FileHash phase5-override.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Phase 5 expected SHA256: $expected"
+          Write-Host "Phase 5 actual SHA256:   $actual"
+          if ($actual -ne $expected) { throw 'Phase 5 package failed SHA-256 verification.' }
+          Expand-Archive phase5-override.zip -DestinationPath $env:SOURCE_ROOT -Force
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore tests
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+
+      - name: Run preservation archive and relationship tests
+        shell: pwsh
+        run: |
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+
+      - name: Publish web application
+        shell: pwsh
+        run: |
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release -r win-x64 --self-contained true -o "$env:GITHUB_WORKSPACE\artifacts\publish\Web"
+
+      - name: Publish silent Windows launcher
+        shell: pwsh
+        run: |
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -r win-x64 --self-contained true -p:EnableWindowsTargeting=true -o "$env:GITHUB_WORKSPACE\artifacts\publish\Launcher"
+
+      - name: Assemble installer payload
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\payload\app\Web" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\publish\Web\*" "$env:GITHUB_WORKSPACE\artifacts\payload\app\Web" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\publish\Launcher\*" "$env:GITHUB_WORKSPACE\artifacts\payload\app" -Recurse -Force
+
+      - name: Download Microsoft SQL Server 2022 Express bootstrapper
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts" | Out-Null
+          Invoke-WebRequest -Uri 'https://download.microsoft.com/download/5/1/4/5145fe04-4d30-4b85-b0d1-39533663a2f1/SQL2022-SSEI-Expr.exe' -OutFile "$env:GITHUB_WORKSPACE\artifacts\SQL2022-SSEI-Expr.exe"
+
+      - name: Download SQL Server LocalDB installation media
+        shell: pwsh
+        run: |
+          $mediaPath = "$env:GITHUB_WORKSPACE\artifacts\sqlmedia"
+          New-Item -ItemType Directory -Force $mediaPath | Out-Null
+          $arguments = @('/Action=Download','/MediaType=LocalDB',"/MediaPath=$mediaPath",'/Quiet')
+          $process = Start-Process -FilePath "$env:GITHUB_WORKSPACE\artifacts\SQL2022-SSEI-Expr.exe" -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "SQL media download failed: $($process.ExitCode)" }
+          $localDb = Get-ChildItem $mediaPath -Filter SqlLocalDB.msi -Recurse | Select-Object -First 1
+          if (-not $localDb) { throw 'SqlLocalDB.msi was not found.' }
+          Copy-Item $localDb.FullName "$env:GITHUB_WORKSPACE\artifacts\payload\SqlLocalDB.msi" -Force
+
+      - name: Build application MSI
+        shell: pwsh
+        run: |
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" -o "$env:GITHUB_WORKSPACE\artifacts\msi"
+
+      - name: Prepare application MSI for bundle
+        shell: pwsh
+        run: |
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\msi\LoperFamilyTreeBuilder.msi" "$env:GITHUB_WORKSPACE\artifacts\payload\LoperFamilyTreeBuilder.msi" -Force
+
+      - name: Build single EXE installer
+        shell: pwsh
+        run: |
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" -o "$env:GITHUB_WORKSPACE\artifacts\setup"
+
+      - name: Stage unsigned internal test installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\final" | Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe" "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe" -Force
+          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe" -Algorithm SHA256
+
+      - name: Upload unsigned internal test installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.0.3-unsigned-test
+          path: artifacts/final/LoperFamilyTreeBuilderSetup.exe
+          if-no-files-found: error
