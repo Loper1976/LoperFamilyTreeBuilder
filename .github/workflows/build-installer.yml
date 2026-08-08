@@ -79,6 +79,60 @@ jobs:
             -Value 'global using Xunit;' `
             -Encoding utf8
 
+      - name: Apply Razor compilation fixes
+        shell: pwsh
+        run: |
+          $importsPath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\_Imports.razor"
+          $imports = Get-Content $importsPath -Raw
+          if ($imports -notmatch 'RenderMode') {
+            Add-Content -Path $importsPath -Value '@using static Microsoft.AspNetCore.Components.Web.RenderMode' -Encoding utf8
+          }
+
+          $homePath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Home.razor"
+          $home = Get-Content $homePath -Raw
+          $home = $home.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
+          $homeMarker = '    private void OpenPeopleSearch()'
+          $homeInsert = @'
+    private void AddPerson()
+    {
+        Navigation.NavigateTo("/people/add");
+    }
+
+    private void OpenPeopleSearch()
+'@
+          $home = $home.Replace($homeMarker, $homeInsert)
+          Set-Content -Path $homePath -Value $home -Encoding utf8
+
+          $peoplePath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\People.razor"
+          $people = Get-Content $peoplePath -Raw
+          $people = $people.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"', '@onclick="AddPerson"')
+          $peopleMarker = '    private static string FormatDate(DateOnly? date)'
+          $peopleInsert = @'
+    private void AddPerson()
+    {
+        Navigation.NavigateTo("/people/add");
+    }
+
+    private static string FormatDate(DateOnly? date)
+'@
+          $people = $people.Replace($peopleMarker, $peopleInsert)
+          Set-Content -Path $peoplePath -Value $people -Encoding utf8
+
+          $addPath = "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\AddPerson.razor"
+          $add = Get-Content $addPath -Raw
+          $add = $add.Replace('@onclick="() => Navigation.NavigateTo("/people")"', '@onclick="Cancel"')
+          $addMarker = '    private CreatePersonRequest ToRequest()'
+          $addInsert = @'
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/people");
+    }
+
+    private CreatePersonRequest ToRequest()
+'@
+          $add = $add.Replace($addMarker, $addInsert)
+          Set-Content -Path $addPath -Value $add -Encoding utf8
+
       - name: Restore tests
         shell: pwsh
         run: |
