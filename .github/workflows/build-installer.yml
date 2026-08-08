@@ -16,21 +16,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Reassemble Phase 3 source package
+      - name: Reassemble exact Phase 3 source package
         shell: pwsh
         run: |
-          $parts = @(
+          $base64 = ''
+
+          foreach ($part in @(
             'bootstrap/source.part01.b64',
             'bootstrap/source.part02.b64',
             'bootstrap/source.part03.b64',
             'bootstrap/source.part04.b64',
             'bootstrap/source.part05.b64',
-            'bootstrap/source.part06.b64',
-            'bootstrap/source.part07.b64',
-            'bootstrap/source.part08.b64'
-          )
+            'bootstrap/source.part06.b64'
+          )) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
 
-          $base64 = ($parts | ForEach-Object { Get-Content $_ -Raw }) -join ''
+          $base64 += (Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+
+          $part7d = (Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          if ($part7d.Length -lt 4500) {
+            throw 'Source part 7d is incomplete.'
+          }
+          $base64 += $part7d.Substring(0, 4500)
+
+          $base64 += (Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+
           [IO.File]::WriteAllBytes(
             'phase3.zip',
             [Convert]::FromBase64String($base64)
