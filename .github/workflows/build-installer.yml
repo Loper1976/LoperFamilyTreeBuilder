@@ -160,19 +160,29 @@ jobs:
       - name: Download SQL Server LocalDB installation media
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\sqlmedia" | Out-Null
+          $mediaPath = "$env:GITHUB_WORKSPACE\artifacts\sqlmedia"
+          New-Item -ItemType Directory -Force $mediaPath | Out-Null
 
-          & "$env:GITHUB_WORKSPACE\artifacts\SQL2022-SSEI-Expr.exe" `
-            /Action=Download `
-            /MediaType=LocalDB `
-            /MediaPath="$env:GITHUB_WORKSPACE\artifacts\sqlmedia" `
-            /Quiet
+          $arguments = @(
+            '/Action=Download',
+            '/MediaType=LocalDB',
+            "/MediaPath=$mediaPath",
+            '/Quiet'
+          )
 
-          if ($LASTEXITCODE -ne 0) {
-            throw "SQL Server Express media download failed with exit code $LASTEXITCODE."
+          $process = Start-Process `
+            -FilePath "$env:GITHUB_WORKSPACE\artifacts\SQL2022-SSEI-Expr.exe" `
+            -ArgumentList $arguments `
+            -Wait `
+            -PassThru
+
+          Write-Host "SQL media downloader exit code: $($process.ExitCode)"
+
+          if ($process.ExitCode -ne 0) {
+            throw "SQL Server Express media download failed with exit code $($process.ExitCode)."
           }
 
-          $localDb = Get-ChildItem "$env:GITHUB_WORKSPACE\artifacts\sqlmedia" -Filter SqlLocalDB.msi -Recurse | Select-Object -First 1
+          $localDb = Get-ChildItem $mediaPath -Filter SqlLocalDB.msi -Recurse | Select-Object -First 1
 
           if (-not $localDb) {
             throw 'SqlLocalDB.msi was not found in the downloaded Microsoft installation media.'
