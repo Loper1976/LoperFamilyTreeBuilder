@@ -1,0 +1,76 @@
+@page "/diagnostics"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "ProjectOwner,Administrator")]
+@inject SystemDiagnosticsService Diagnostics
+
+<PageTitle>System Diagnostics - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>System Diagnostics</h1>
+        <p>Release-readiness checks for the database, archive storage, Legacy Number preservation, backups, and application configuration.</p>
+    </div>
+    <button class="primary-action" @onclick="ReloadAsync" disabled="@_loading">Run Diagnostics</button>
+</div>
+
+@if (_loading)
+{
+    <section class="page-card">Running system checks...</section>
+}
+else if (_report is null)
+{
+    <section class="page-card">Diagnostics could not be loaded.</section>
+}
+else
+{
+    <div class="summary-grid">
+        <div class="summary-card"><div class="summary-value">@_report.People</div><div class="summary-label">People</div></div>
+        <div class="summary-card"><div class="summary-value">@_report.LegacyNumbers</div><div class="summary-label">Legacy Numbers</div></div>
+        <div class="summary-card"><div class="summary-value">@_report.ParentChildRelationships</div><div class="summary-label">Parent / Child</div></div>
+        <div class="summary-card"><div class="summary-value">@_report.CoupleRelationships</div><div class="summary-label">Couples</div></div>
+        <div class="summary-card"><div class="summary-value">@_report.ManagedBackups</div><div class="summary-label">Managed Backups</div></div>
+    </div>
+
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Release Readiness</h2>
+            <strong>@(_report.IsReady ? "READY" : "ATTENTION REQUIRED")</strong>
+        </div>
+        <p>Generated @_report.GeneratedUtc.ToLocalTime().ToString("g") · Application @_report.ApplicationVersion · Schema @_report.LatestAppliedMigration</p>
+        <div class="audit-list">
+            @foreach (var check in _report.Checks)
+            {
+                <div class="audit-row">
+                    <div>
+                        <strong>@check.Category · @check.Name</strong>
+                        <div>@check.Detail</div>
+                    </div>
+                    <div>@(check.Passed ? "PASS" : check.Required ? "FAIL" : "NOTICE")</div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card">
+        <h2>Preservation Status</h2>
+        <p>Diagnostics are read-only. They do not renumber, normalize, repair, merge, or otherwise alter Robert J. Loper Legacy Numbers or genealogy relationships.</p>
+        @if (_report.DuplicateLegacyNumbers > 0)
+        {
+            <div class="alert">@_report.DuplicateLegacyNumbers duplicate Legacy Number value(s) were detected for review. No automatic changes were made.</div>
+        }
+    </section>
+}
+
+@code {
+    private SystemDiagnosticsReport? _report;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync() => await ReloadAsync();
+
+    private async Task ReloadAsync()
+    {
+        _loading = true;
+        try { _report = await Diagnostics.GetReportAsync(); }
+        finally { _loading = false; }
+    }
+}
