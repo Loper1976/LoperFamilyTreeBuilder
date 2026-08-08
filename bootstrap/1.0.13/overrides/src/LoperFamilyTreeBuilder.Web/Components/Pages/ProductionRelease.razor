@@ -1,0 +1,96 @@
+@page "/production-release"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "ProjectOwner,Administrator")]
+@inject SystemDiagnosticsService Diagnostics
+@inject HostingReadinessService Hosting
+
+<PageTitle>Production Release - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Production Release Readiness</h1>
+        <p>Final local archive, recovery, hosted-deployment, and release checks for version 1.0.13.</p>
+    </div>
+</div>
+
+@if (_system is null || _hosting is null)
+{
+    <div class="page-card">Running production release checks...</div>
+}
+else
+{
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-value">@(_localReady ? "READY" : "BLOCKED")</div>
+            <div class="summary-label">Local Production Readiness</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">@(_hosting.HostedMode ? (_hosting.IsReady ? "READY" : "BLOCKED") : "OFF")</div>
+            <div class="summary-label">Hosted Deployment</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">1.0.13</div>
+            <div class="summary-label">Release Version</div>
+        </div>
+    </div>
+
+    <section class="page-card">
+        <h2>Local Archive and Recovery</h2>
+        <div class="readiness-list">
+            @foreach (var check in _system.Checks)
+            {
+                <div class="readiness-row">
+                    <div class="readiness-indicator @(check.Passed ? "passed" : check.Required ? "failed" : "optional")">
+                        @(check.Passed ? "PASS" : check.Required ? "BLOCKED" : "NOTICE")
+                    </div>
+                    <div>
+                        <strong>@check.Category - @check.Name</strong>
+                        <p>@check.Detail</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card">
+        <h2>Hosted Deployment</h2>
+        <div class="readiness-list">
+            @foreach (var check in _hosting.Checks)
+            {
+                <div class="readiness-row">
+                    <div class="readiness-indicator @(check.Passed ? "passed" : check.Required ? "failed" : "optional")">
+                        @(check.Passed ? "PASS" : check.Required ? "BLOCKED" : "OPTIONAL")
+                    </div>
+                    <div>
+                        <strong>@check.Name</strong>
+                        <p>@check.Detail</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card">
+        <h2>Windows Installer Signing</h2>
+        <p>Authenticode signing is an external release step because the signing identity and certificate/service credentials must belong to the verified publisher. The application never embeds signing credentials.</p>
+        <p><strong>Status:</strong> Verify the downloaded installer signature in Windows before designating it as a signed public release.</p>
+    </section>
+
+    <section class="page-card">
+        <h2>Preservation Gate</h2>
+        <p>Production release approval does not permit changes to Robert J. Loper Legacy Numbers. Historical identifiers remain preserved exactly as stored.</p>
+    </section>
+}
+
+@code {
+    private SystemDiagnosticsReport? _system;
+    private HostingReadinessReport? _hosting;
+    private bool _localReady;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _system = await Diagnostics.GetReportAsync();
+        _hosting = await Hosting.GetReportAsync();
+        _localReady = _system.Checks.Where(x => x.Required).All(x => x.Passed);
+    }
+}
