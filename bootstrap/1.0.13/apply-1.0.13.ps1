@@ -57,8 +57,19 @@ $program = $program.Replace($anchor, $releaseEndpoint + $anchor)
 Set-Content -Path $programPath -Value $program -Encoding utf8 -NoNewline
 
 # Add production release visibility to the permanent navigation and dashboard.
-Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Layout/NavMenu.razor' '        <NavLink href="/about">About / Version</NavLink>' "        <NavLink href=\"/production-release\">Production Release</NavLink>`r`n        <NavLink href=\"/about\">About / Version</NavLink>"
-Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/Home.razor' '            <a href="/diagnostics">Run System Diagnostics</a>' "            <a href=\"/diagnostics\">Run System Diagnostics</a>`r`n            <a href=\"/production-release\">Production Release Readiness</a>"
+$newNav = @'
+        <NavLink href="/production-release">Production Release</NavLink>
+        <NavLink href="/about">About / Version</NavLink>
+'@
+$newNav = $newNav.TrimEnd("`r", "`n")
+Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Layout/NavMenu.razor' '        <NavLink href="/about">About / Version</NavLink>' $newNav
+
+$newHome = @'
+            <a href="/diagnostics">Run System Diagnostics</a>
+            <a href="/production-release">Production Release Readiness</a>
+'@
+$newHome = $newHome.TrimEnd("`r", "`n")
+Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/Home.razor' '            <a href="/diagnostics">Run System Diagnostics</a>' $newHome
 
 # Copy complete 1.0.13 overrides into the reconstructed tree.
 $overrideRoot = Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.0.13/overrides'
