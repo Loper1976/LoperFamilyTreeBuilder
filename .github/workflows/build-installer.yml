@@ -71,6 +71,21 @@ jobs:
         run: |
           "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Use WiX 5 installer toolchain
+        shell: pwsh
+        run: |
+          $msiProject = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj"
+          $setupProject = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj"
+
+          $msiText = Get-Content $msiProject -Raw
+          $msiText = $msiText.Replace('WixToolset.Sdk/7.0.0', 'WixToolset.Sdk/5.0.0')
+          Set-Content -Path $msiProject -Value $msiText -Encoding utf8
+
+          $setupText = Get-Content $setupProject -Raw
+          $setupText = $setupText.Replace('WixToolset.Sdk/7.0.0', 'WixToolset.Sdk/5.0.0')
+          $setupText = $setupText.Replace('WixToolset.Bal.wixext" Version="7.0.0', 'WixToolset.Bal.wixext" Version="5.0.0')
+          Set-Content -Path $setupProject -Value $setupText -Encoding utf8
+
       - name: Apply xUnit build compatibility fix
         shell: pwsh
         run: |
