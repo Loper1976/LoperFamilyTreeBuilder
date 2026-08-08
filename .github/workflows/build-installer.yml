@@ -86,6 +86,14 @@ jobs:
           $setupText = $setupText.Replace('WixToolset.Bal.wixext" Version="7.0.0', 'WixToolset.Bal.wixext" Version="5.0.0')
           Set-Content -Path $setupProject -Value $setupText -Encoding utf8
 
+      - name: Show WiX application package authoring
+        shell: pwsh
+        run: |
+          $packagePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
+          Write-Host '----- Package.wxs -----'
+          Get-Content $packagePath
+          Write-Host '----- End Package.wxs -----'
+
       - name: Apply xUnit build compatibility fix
         shell: pwsh
         run: |
@@ -210,6 +218,7 @@ jobs:
         run: |
           dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" `
             -c Release `
+            -p:InstallerPlatform=x64 `
             -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" `
             -o "$env:GITHUB_WORKSPACE\artifacts\msi"
 
@@ -225,6 +234,7 @@ jobs:
         run: |
           dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj" `
             -c Release `
+            -p:InstallerPlatform=x64 `
             -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" `
             -o "$env:GITHUB_WORKSPACE\artifacts\setup"
 
