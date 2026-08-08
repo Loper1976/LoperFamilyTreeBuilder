@@ -1,0 +1,1 @@
+Files under bootstrap/1.0.4 are binary portions of one ZIP. Concatenate part00.bin through part07.bin in lexical order, verify SHA-256 from SHA256.txt, then extract over the verified 1.0.3 source tree.
