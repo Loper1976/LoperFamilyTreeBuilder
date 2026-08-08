@@ -36,9 +36,7 @@ jobs:
           $lines = Get-Content $workflow
           $stepLine = "- name: $Name"
           $stepIndex = -1
-          for ($i = 0; $i -lt $lines.Count; $i++) {
-            if ($lines[$i].Trim() -eq $stepLine) { $stepIndex = $i; break }
-          }
+          for ($i = 0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq $stepLine) { $stepIndex = $i; break } }
           if ($stepIndex -lt 0) { throw "Step '$Name' was not found in the known-good workflow." }
           $runIndex = -1
           for ($i = $stepIndex + 1; $i -lt $lines.Count; $i++) {
@@ -73,9 +71,7 @@ jobs:
         shell: pwsh
         run: |
           $base64 = ''
-          foreach ($part in (Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\c106safe" -Filter 'part*.b64' | Sort-Object Name)) {
-            $base64 += (Get-Content $part.FullName -Raw).Trim()
-          }
+          foreach ($part in (Get-ChildItem "$env:GITHUB_WORKSPACE\bootstrap\c106safe" -Filter 'part*.b64' | Sort-Object Name)) { $base64 += (Get-Content $part.FullName -Raw).Trim() }
           if ($base64.Length -ne 24040) { throw "1.0.6 base64 length mismatch: $($base64.Length)" }
           [IO.File]::WriteAllBytes('delta-1.0.6.zip',[Convert]::FromBase64String($base64))
           $actual = (Get-FileHash 'delta-1.0.6.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -86,9 +82,7 @@ jobs:
         shell: pwsh
         run: |
           $base64 = ''
-          foreach ($part in @('bootstrap/cumulative107/part00.b64','bootstrap/cumulative107/part01.b64','bootstrap/cumulative107/part02.b64')) {
-            $base64 += (Get-Content $part -Raw).Trim()
-          }
+          foreach ($part in @('bootstrap/cumulative107/part00.b64','bootstrap/cumulative107/part01.b64','bootstrap/cumulative107/part02.b64')) { $base64 += (Get-Content $part -Raw).Trim() }
           if ($base64.Length -ne 41560) { throw "1.0.7 base64 length mismatch: $($base64.Length)" }
           [IO.File]::WriteAllBytes('delta-1.0.7.zip',[Convert]::FromBase64String($base64))
           $actual = (Get-FileHash 'delta-1.0.7.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -104,7 +98,8 @@ jobs:
             'bootstrap/exact108/part01.b64',
             'bootstrap/exact108/part02a.b64',
             'bootstrap/exact108/part02b.b64',
-            'bootstrap/exact108/part02c.b64',
+            'bootstrap/exact108/part02c1.b64',
+            'bootstrap/exact108/part02c2.b64',
             'bootstrap/exact108/part02d.b64'
           )) { $base64 += (Get-Content $part -Raw).Trim() }
           if ($base64.Length -ne 41544) { throw "1.0.8 base64 length mismatch: $($base64.Length)" }
