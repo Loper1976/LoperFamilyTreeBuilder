@@ -11,7 +11,7 @@ function Replace-RequiredText {
 
     $text = Get-Content $Path -Raw
     if (-not $text.Contains($OldText)) {
-        throw "Required text was not found in $Path: $OldText"
+        throw "Required text was not found in ${Path}: $OldText"
     }
 
     $text = $text.Replace($OldText, $NewText)
@@ -37,15 +37,12 @@ $routesToRemove = @(
     '/users'
 )
 
-$placeholder = Get-Content $placeholderPath -Raw
-foreach ($route in $routesToRemove) {
-    $escaped = [regex]::Escape($route)
-    $placeholder = [regex]::Replace(
-        $placeholder,
-        "(?m)^@page\s+`\"$escaped`\"\r?\n",
-        '')
+$routeDirectives = $routesToRemove | ForEach-Object { '@page "' + $_ + '"' }
+$placeholderLines = Get-Content $placeholderPath
+$filteredPlaceholder = $placeholderLines | Where-Object {
+    $routeDirectives -notcontains $_.Trim()
 }
-Set-Content -Path $placeholderPath -Value $placeholder -Encoding utf8
+Set-Content -Path $placeholderPath -Value $filteredPlaceholder -Encoding utf8
 
 # Version the fix as 1.1.1 so an installed 1.1.0 can upgrade cleanly.
 Replace-RequiredText `
@@ -76,19 +73,19 @@ Get-ChildItem $pagesRoot -Filter '*.razor' -File -Recurse | ForEach-Object {
     foreach ($match in [regex]::Matches($text, '(?m)^@page\s+"([^"]+)"')) {
         $route = $match.Groups[1].Value
         if (-not $routeOwners.ContainsKey($route)) {
-            $routeOwners[$route] = New-Object System.Collections.Generic.List[string]
+            $routeOwners[$route] = @()
         }
-        $routeOwners[$route].Add($file.Name)
+        $routeOwners[$route] += $file.Name
     }
 }
 
-$duplicates = $routeOwners.GetEnumerator() |
-    Where-Object { $_.Value.Count -gt 1 } |
-    Sort-Object Name
+$duplicates = @($routeOwners.GetEnumerator() |
+    Where-Object { @($_.Value).Count -gt 1 } |
+    Sort-Object Name)
 
-if ($duplicates) {
+if ($duplicates.Count -gt 0) {
     $details = ($duplicates | ForEach-Object {
-        "$($_.Name) => $([string]::Join(', ', $_.Value))"
+        "$($_.Name) => $([string]::Join(', ', @($_.Value)))"
     }) -join '; '
     throw "Duplicate page routes remain: $details"
 }
@@ -109,7 +106,7 @@ foreach ($entry in $expectedOwners.GetEnumerator()) {
         throw "Required route is missing after hotfix: $($entry.Key)"
     }
 
-    $owners = $routeOwners[$entry.Key]
+    $owners = @($routeOwners[$entry.Key])
     if ($owners.Count -ne 1 -or $owners[0] -ne $entry.Value) {
         throw "Route owner verification failed for $($entry.Key). Expected $($entry.Value), found $([string]::Join(', ', $owners))."
     }
