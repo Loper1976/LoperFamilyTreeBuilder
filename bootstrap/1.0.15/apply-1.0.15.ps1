@@ -50,6 +50,12 @@ foreach ($relative in $versionFiles) {
 # Register the report assembly service.
 Replace-Exact 'src/LoperFamilyTreeBuilder.Data/ServiceCollectionExtensions.cs' '        services.AddScoped<SystemDiagnosticsService>();' "        services.AddScoped<SystemDiagnosticsService>();`r`n        services.AddScoped<DetailedPersonReportService>();"
 
+# The report privacy tests exercise the Data-layer report service.
+$testProject = 'tests/LoperFamilyTreeBuilder.Tests/LoperFamilyTreeBuilder.Tests.csproj'
+$oldTestReference = '    <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.ImportExport\LoperFamilyTreeBuilder.ImportExport.csproj" />'
+$newTestReference = $oldTestReference + "`r`n" + '    <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.Data\LoperFamilyTreeBuilder.Data.csproj" />'
+Replace-Exact $testProject $oldTestReference $newTestReference
+
 # Put the professional report one click away from the desktop Person Profile.
 $oldPersonAction = '                <button class="primary-action" @onclick="EditPerson">Edit Person</button>'
 $newPersonAction = $oldPersonAction + "`r`n" + '                <a class="secondary-action inline-link-button" href="@($"/people/{PersonId}/detailed-report")">Detailed Report</a>'
