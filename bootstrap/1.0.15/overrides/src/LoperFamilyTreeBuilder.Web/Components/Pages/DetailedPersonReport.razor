@@ -1,0 +1,275 @@
+@page "/person-report/{PersonId:guid}"
+@using LoperFamilyTreeBuilder.Core.Models
+@inject LoperFamilyTreeBuilder.Data.Services.DetailedPersonReportService ReportService
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+
+<PageTitle>@(_report is null ? "Detailed Person Report" : $"{_report.DisplayName} - Detailed Profile")</PageTitle>
+
+@if (_loading)
+{
+    <div class="report-loading">Preparing detailed profile…</div>
+}
+else if (_report is null)
+{
+    <section class="page-card">
+        <h1>Person not found</h1>
+        <p>The requested person could not be loaded.</p>
+        <a href="/people">Return to People</a>
+    </section>
+}
+else
+{
+    <div class="report-toolbar" role="toolbar" aria-label="Detailed report actions">
+        <div class="report-toolbar-title">
+            <strong>Detailed Person Profile</strong>
+            <span>@ModeLabel(_report.Mode)</span>
+        </div>
+        <div class="report-toolbar-actions">
+            <select aria-label="Report privacy mode" value="@ModeValue(_report.Mode)" @onchange="ChangeModeAsync">
+                <option value="archival">Full Archival</option>
+                <option value="family">Family</option>
+                <option value="public">Public-Safe</option>
+            </select>
+            <button type="button" class="btn btn-primary" @onclick="PrintAsync">Print / Save PDF</button>
+            <a class="btn btn-secondary" href="@($"/people/{PersonId}")">Back to Profile</a>
+        </div>
+    </div>
+
+    <article class="detailed-person-report">
+        <header class="report-hero">
+            <div class="report-photo-frame">
+                @if (!string.IsNullOrWhiteSpace(_report.PrimaryPhotoReference))
+                {
+                    <img src="@_report.PrimaryPhotoReference" alt="Primary photograph of @_report.DisplayName" />
+                }
+                else
+                {
+                    <div class="report-photo-placeholder" aria-label="No primary photograph available">
+                        <span>@Initials(_report.DisplayName)</span>
+                    </div>
+                }
+            </div>
+
+            <div class="report-identity">
+                <div class="report-kicker">Loper Family Tree · Individual Profile</div>
+                <h1>@_report.DisplayName</h1>
+                @if (!string.IsNullOrWhiteSpace(_report.Lifespan))
+                {
+                    <div class="report-lifespan">@_report.Lifespan</div>
+                }
+                <div class="report-badges">
+                    @if (!string.IsNullOrWhiteSpace(_report.LegacyNumber))
+                    {
+                        <span class="report-badge"><strong>Legacy Number</strong> @_report.LegacyNumber</span>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(_report.BranchName))
+                    {
+                        <span class="report-badge"><strong>Branch</strong> @_report.BranchName</span>
+                    }
+                    <span class="report-badge">@(_report.IsDeceased ? "Deceased" : "Living")</span>
+                </div>
+                <p class="report-preservation-note">Legacy Numbers are displayed exactly as preserved in the historical archive.</p>
+            </div>
+        </header>
+
+        @if (_report.VitalFacts.Count > 0)
+        {
+            <section class="report-section report-vitals">
+                <div class="report-section-heading">
+                    <span>01</span>
+                    <h2>Vital Information</h2>
+                </div>
+                <dl class="report-fact-grid">
+                    @foreach (var fact in _report.VitalFacts)
+                    {
+                        <div class="report-fact">
+                            <dt>@fact.Label</dt>
+                            <dd>@fact.Value</dd>
+                        </div>
+                    }
+                </dl>
+            </section>
+        }
+
+        @if (_report.FamilyRelationships.Count > 0)
+        {
+            <section class="report-section">
+                <div class="report-section-heading">
+                    <span>02</span>
+                    <h2>Family & Lineage</h2>
+                </div>
+                <div class="report-family-grid">
+                    @foreach (var group in _report.FamilyRelationships.GroupBy(x => x.Relationship))
+                    {
+                        <div class="report-family-group">
+                            <h3>@group.Key</h3>
+                            @foreach (var relationship in group)
+                            {
+                                <div class="report-family-person">
+                                    @if (relationship.RelatedPersonId.HasValue)
+                                    {
+                                        <a href="@($"/people/{relationship.RelatedPersonId}")">@relationship.PersonName</a>
+                                    }
+                                    else
+                                    {
+                                        <span>@relationship.PersonName</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(relationship.Detail))
+                                    {
+                                        <small>@relationship.Detail</small>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        @if (_report.Timeline.Count > 0)
+        {
+            <section class="report-section">
+                <div class="report-section-heading">
+                    <span>03</span>
+                    <h2>Life Timeline</h2>
+                </div>
+                <div class="report-timeline">
+                    @foreach (var item in _report.Timeline)
+                    {
+                        <div class="report-timeline-item">
+                            <div class="report-timeline-date">@(item.Date ?? "Date unknown")</div>
+                            <div class="report-timeline-content">
+                                <h3>@item.Event</h3>
+                                @if (!string.IsNullOrWhiteSpace(item.Place))
+                                {
+                                    <div class="report-place">@item.Place</div>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.Detail))
+                                {
+                                    <p>@item.Detail</p>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(item.Source))
+                                {
+                                    <small>Source: @item.Source</small>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
+
+        @{ var sectionNumber = 4; }
+        @foreach (var section in _report.Sections)
+        {
+            <section class="report-section @(section.IsMedical ? "report-medical-section" : null)">
+                <div class="report-section-heading">
+                    <span>@sectionNumber.ToString("00")</span>
+                    <h2>@section.Title</h2>
+                    @if (section.IsMedical)
+                    {
+                        <em>Deceased-person archival health history</em>
+                    }
+                </div>
+
+                @foreach (var record in section.Records)
+                {
+                    <div class="report-record">
+                        <h3>@record.Heading</h3>
+                        @if (!string.IsNullOrWhiteSpace(record.Narrative))
+                        {
+                            <p class="report-narrative">@record.Narrative</p>
+                        }
+                        @if (record.Facts.Count > 0)
+                        {
+                            <dl class="report-record-facts">
+                                @foreach (var fact in record.Facts)
+                                {
+                                    <div>
+                                        <dt>@fact.Label</dt>
+                                        <dd>@fact.Value</dd>
+                                    </div>
+                                }
+                            </dl>
+                        }
+                    </div>
+                }
+            </section>
+            sectionNumber++;
+        }
+
+        @if (!_report.IsDeceased && _report.Mode == DetailedReportMode.Archival)
+        {
+            <section class="report-section report-privacy-message">
+                <div class="report-section-heading">
+                    <span>—</span>
+                    <h2>Medical Privacy</h2>
+                </div>
+                <p>Medical and family-health information is intentionally excluded from the normal detailed report for living people.</p>
+            </section>
+        }
+
+        <footer class="report-footer">
+            <div>
+                <strong>Loper Family Tree Builder</strong><br />
+                Preserve the original work. Improve around it. Never replace it.
+            </div>
+            <div class="report-footer-meta">
+                Generated @_report.GeneratedUtc.ToLocalTime().ToString("MMMM d, yyyy 'at' h:mm tt")<br />
+                @ModeLabel(_report.Mode)
+            </div>
+        </footer>
+    </article>
+}
+
+@code {
+    [Parameter] public Guid PersonId { get; set; }
+    [SupplyParameterFromQuery(Name = "mode")] public string? Mode { get; set; }
+
+    private DetailedPersonReport? _report;
+    private bool _loading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _report = await ReportService.BuildAsync(PersonId, ParseMode(Mode));
+        _loading = false;
+    }
+
+    private async Task PrintAsync() => await JS.InvokeVoidAsync("print");
+
+    private Task ChangeModeAsync(ChangeEventArgs args)
+    {
+        var value = args.Value?.ToString() ?? "archival";
+        Navigation.NavigateTo($"/person-report/{PersonId}?mode={Uri.EscapeDataString(value)}");
+        return Task.CompletedTask;
+    }
+
+    private static DetailedReportMode ParseMode(string? value) => value?.ToLowerInvariant() switch
+    {
+        "family" => DetailedReportMode.Family,
+        "public" or "publicsafe" or "public-safe" => DetailedReportMode.PublicSafe,
+        _ => DetailedReportMode.Archival
+    };
+
+    private static string ModeValue(DetailedReportMode mode) => mode switch
+    {
+        DetailedReportMode.Family => "family",
+        DetailedReportMode.PublicSafe => "public",
+        _ => "archival"
+    };
+
+    private static string ModeLabel(DetailedReportMode mode) => mode switch
+    {
+        DetailedReportMode.Family => "Family Report",
+        DetailedReportMode.PublicSafe => "Public-Safe Report",
+        _ => "Full Archival Report"
+    };
+
+    private static string Initials(string name)
+    {
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return string.Concat(words.Take(2).Select(x => char.ToUpperInvariant(x[0])));
+    }
+}
