@@ -1,0 +1,90 @@
+name: Export reconstructed 1.0.16 source for 1.1.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.0-web-experience-final ]
+    paths:
+      - '.github/workflows/export-1.0.16-source-for-1.1.0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create 1.0.16 step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.0.16-research-intelligence.yml'
+          if (-not (Test-Path $workflow)) { throw "1.0.16 workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break } }
+          if ($stepIndex -lt 0) { throw "1.0.16 step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^      - ') { break }; if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break } }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) } elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "1.0.16 step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" -Encoding utf8
+
+      - name: Create foundation helpers
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Create 1.0.15 step runner'
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Create foundation helpers'
+
+      - name: Reconstruct cumulative 1.0.11
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Reconstruct cumulative 1.0.11'
+
+      - name: Apply cumulative 1.0.12
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Apply cumulative 1.0.12'
+
+      - name: Apply production 1.0.13
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Apply production 1.0.13'
+
+      - name: Apply modern person profile 1.0.14
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Apply modern person profile 1.0.14'
+
+      - name: Apply professional detailed person report 1.0.15
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Apply professional detailed person report 1.0.15'
+
+      - name: Apply research intelligence 1.0.16
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-116Step.ps1" 'Apply research intelligence 1.0.16'
+
+      - name: Package source
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:SOURCE_ROOT\*" -DestinationPath "$env:GITHUB_WORKSPACE\LoperFamilyTreeBuilder-1.0.16-source.zip" -Force
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.0.16-source-for-1.1.0
+          path: LoperFamilyTreeBuilder-1.0.16-source.zip
+          if-no-files-found: error
