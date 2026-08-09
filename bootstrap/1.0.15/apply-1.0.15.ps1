@@ -33,7 +33,6 @@ Replace-Exact 'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs' 'pri
 $programPath = Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/Program.cs'
 $program = Get-Content $programPath -Raw
 $program = $program.Replace('version = "1.0.14"', 'version = "1.0.15"')
-$program = $program.Replace('version = "1.0.14",', 'version = "1.0.15",')
 Set-Content $programPath $program -Encoding utf8 -NoNewline
 
 foreach ($relative in @(
@@ -50,6 +49,8 @@ foreach ($relative in @(
 Replace-Exact 'src/LoperFamilyTreeBuilder.Data/ServiceCollectionExtensions.cs' '        services.AddScoped<SystemDiagnosticsService>();' "        services.AddScoped<SystemDiagnosticsService>();`r`n        services.AddScoped<DetailedPersonReportService>();"
 
 # Put the professional report one click away from the desktop Person Profile.
-Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/PersonDetails.razor' '                <button class="primary-action" @onclick="EditPerson">Edit Person</button>' "                <button class=\"primary-action\" @onclick=\"EditPerson\">Edit Person</button>`r`n                <a class=\"secondary-action inline-link-button\" href=\"@($\"/people/{PersonId}/detailed-report\")\">Detailed Report</a>"
+$oldPersonAction = '                <button class="primary-action" @onclick="EditPerson">Edit Person</button>'
+$newPersonAction = $oldPersonAction + "`r`n" + '                <a class="secondary-action inline-link-button" href="@($"/people/{PersonId}/detailed-report")">Detailed Report</a>'
+Replace-Exact 'src/LoperFamilyTreeBuilder.Web/Components/Pages/PersonDetails.razor' $oldPersonAction $newPersonAction
 
 Write-Host '1.0.15 Professional Detailed Person Report applied.'
