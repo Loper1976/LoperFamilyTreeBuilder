@@ -46,12 +46,24 @@ jobs:
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Create previous-release step runner'
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Create foundation helper'
 
-      - name: Reconstruct 1.0.14 source
+      - name: Reconstruct cumulative 1.0.11
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Reconstruct cumulative 1.0.11'
+
+      - name: Apply cumulative 1.0.12
+        shell: pwsh
+        run: |
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply cumulative 1.0.12'
+
+      - name: Apply production 1.0.13
+        shell: pwsh
+        run: |
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply production 1.0.13'
+
+      - name: Apply modern person profile 1.0.14
+        shell: pwsh
+        run: |
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply modern person profile 1.0.14'
 
       - name: Package source
