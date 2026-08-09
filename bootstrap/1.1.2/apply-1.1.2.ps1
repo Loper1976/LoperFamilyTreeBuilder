@@ -15,7 +15,13 @@ function Replace-RequiredText {
     Set-Content -Path $Path -Value ($text.Replace($OldText, $NewText)) -Encoding utf8
 }
 
-$parts = 0..3 | ForEach-Object { Join-Path $env:GITHUB_WORKSPACE ("bootstrap/1.1.2/part{0:D2}.b64" -f $_) }
+$parts = @(
+    Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.1.2/part00.b64'
+    Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.1.2/part00b.b64'
+    Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.1.2/part01.b64'
+    Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.1.2/part02.b64'
+    Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.1.2/part03.b64'
+)
 foreach ($part in $parts) {
     if (-not (Test-Path $part)) { throw "Missing 1.1.2 package part: $part" }
 }
