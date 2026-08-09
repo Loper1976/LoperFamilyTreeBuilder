@@ -1,0 +1,132 @@
+name: Export reconstructed 1.1.2 source for 1.1.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.3-family-contribution-portal ]
+    paths:
+      - '.github/workflows/export-1.1.2-source-for-1.1.3.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create 1.1.2 step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.2-family-accounts-permissions.yml'
+          if (-not (Test-Path $workflow)) { throw "1.1.2 workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break }
+          }
+          if ($stepIndex -lt 0) { throw "1.1.2 step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break }
+          }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) }
+            elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "1.1.2 step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" -Encoding utf8
+
+      - name: Create 1.1.1 step runner
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Create 1.1.1 step runner'
+
+      - name: Create 1.1.0 step runner
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Create 1.1.0 step runner'
+
+      - name: Create 1.0.16 step runner
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Create 1.0.16 step runner'
+
+      - name: Create foundation helpers
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Create foundation helpers'
+
+      - name: Reconstruct cumulative 1.0.11
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Reconstruct cumulative 1.0.11'
+
+      - name: Apply cumulative 1.0.12
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply cumulative 1.0.12'
+
+      - name: Apply production 1.0.13
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply production 1.0.13'
+
+      - name: Apply modern person profile 1.0.14
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply modern person profile 1.0.14'
+
+      - name: Apply professional detailed person report 1.0.15
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply professional detailed person report 1.0.15'
+
+      - name: Apply research intelligence 1.0.16
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply research intelligence 1.0.16'
+
+      - name: Apply web experience architecture 1.1.0
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply web experience architecture 1.1.0'
+
+      - name: Apply route reliability hotfix 1.1.1
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-112Step.ps1" 'Apply route reliability hotfix 1.1.1'
+
+      - name: Apply family accounts and permissions 1.1.2
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.2\apply-1.1.2.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Package reconstructed source
+        shell: pwsh
+        run: |
+          if (-not $env:SOURCE_ROOT -or -not (Test-Path $env:SOURCE_ROOT)) { throw 'SOURCE_ROOT is missing.' }
+          $zip = Join-Path $env:GITHUB_WORKSPACE 'LoperFamilyTreeBuilder-1.1.2-source.zip'
+          Compress-Archive -Path (Join-Path $env:SOURCE_ROOT '*') -DestinationPath $zip -CompressionLevel Optimal
+          Write-Host "Source archive: $zip"
+
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.1.2-source-for-1.1.3
+          path: LoperFamilyTreeBuilder-1.1.2-source.zip
+          if-no-files-found: error
