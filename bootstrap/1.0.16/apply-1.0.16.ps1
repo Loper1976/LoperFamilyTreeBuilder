@@ -26,8 +26,8 @@ if ($encoded.Length -ne 49120) {
 $zipPath = Join-Path $env:RUNNER_TEMP 'LoperFamilyTreeBuilder_1.0.16_delta.zip'
 [IO.File]::WriteAllBytes($zipPath, [Convert]::FromBase64String($encoded))
 $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($hash -ne 'a9afcde28a2bee0fbb0ad97aaf1dac9aff70625ae24ddedeb6cb8e836b0f5e17') {
-    throw "1.0.16 package hash mismatch: $hash"
+if ($hash -ne 'cafec464c9acd07fdecbf39a5063ddd1fbe802f30062592de9e32a0ce7c33ecb') {
+    throw "1.0.16 reconstructed package hash mismatch: $hash"
 }
 
 Expand-Archive -Path $zipPath -DestinationPath $Root -Force
@@ -61,5 +61,5 @@ foreach ($required in @(
     if (-not (Test-Path (Join-Path $Root $required))) { throw "Required 1.0.16 file missing: $required" }
 }
 
-Write-Host "1.0.16 Research Intelligence package verified: $hash"
+Write-Host "1.0.16 Research Intelligence reconstructed package verified: $hash"
 Write-Host '1.0.16 Research Intelligence & Global Archive Search applied.'
