@@ -1,0 +1,232 @@
+@page "/archive-search"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using LoperFamilyTreeBuilder.Core.Models
+@inject LoperFamilyTreeBuilder.Data.Services.GlobalArchiveSearchService SearchService
+@inject LoperFamilyTreeBuilder.Data.Services.ResearchIntelligenceStore IntelligenceStore
+
+<PageTitle>Global Archive Search - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header research-page-header">
+    <div>
+        <div class="eyebrow">Research Intelligence</div>
+        <h1>Global Archive Search</h1>
+        <p>Search across genealogy, identifiers, sources, documents, photographs, timelines, cemetery, military, research, and authorized health records from one workspace.</p>
+    </div>
+    <a class="btn btn-secondary" href="/research-intelligence">Research Intelligence</a>
+</div>
+
+<section class="page-card archive-search-panel">
+    <div class="archive-search-primary">
+        <label for="archiveQuery">Search the family archive</label>
+        <div class="archive-search-row">
+            <input id="archiveQuery" class="form-control" @bind="_query" @bind:event="oninput" @onkeydown="HandleSearchKey" placeholder="Name, place, date, Legacy Number, source, document text, cemetery, military record…" />
+            <button type="button" class="btn btn-primary" @onclick="RunSearchAsync" disabled="@_busy">@(_busy ? "Searching…" : "Search")</button>
+        </div>
+    </div>
+
+    <details class="advanced-search" open="@_showAdvanced">
+        <summary>Advanced person filters</summary>
+        <div class="advanced-filter-grid">
+            <label>Legacy Number<input class="form-control" @bind="_legacy" placeholder="Exact or partial historical value" /></label>
+            <label>Family branch<input class="form-control" @bind="_branch" placeholder="Loper, Beadle…" /></label>
+            <label>Living status
+                <select class="form-control" @bind="_living">
+                    <option value="Any">Any</option><option value="Living">Living</option><option value="Deceased">Deceased</option>
+                </select>
+            </label>
+            <label>Birth year from<input class="form-control" type="number" @bind="_birthFrom" /></label>
+            <label>Birth year to<input class="form-control" type="number" @bind="_birthTo" /></label>
+            <label>Death year from<input class="form-control" type="number" @bind="_deathFrom" /></label>
+            <label>Death year to<input class="form-control" type="number" @bind="_deathTo" /></label>
+        </div>
+        <div class="advanced-check-grid">
+            <label><input type="checkbox" @bind="_missingParent" /> Missing parent</label>
+            <label><input type="checkbox" @bind="_missingSource" /> Missing source</label>
+            <label><input type="checkbox" @bind="_missingCemetery" /> Missing cemetery</label>
+            <label><input type="checkbox" @bind="_hasMilitary" /> Has military records</label>
+            <label><input type="checkbox" @bind="_hasMedical" /> Has medical/health records</label>
+        </div>
+    </details>
+
+    <div class="saved-search-bar">
+        <label for="saveSearchName">Save these filters</label>
+        <input id="saveSearchName" class="form-control" @bind="_savedSearchName" placeholder="Example: Unknown Loper fathers 1850–1900" />
+        <button type="button" class="btn btn-secondary" @onclick="SaveSearchAsync">Save Search</button>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="archive-search-message" role="status">@_message</div>
+    }
+</section>
+
+@if (_savedSearches.Count > 0)
+{
+    <section class="page-card compact-section">
+        <div class="section-heading-row"><h2>Saved Searches</h2><span>@_savedSearches.Count</span></div>
+        <div class="saved-search-chips">
+            @foreach (var saved in _savedSearches.OrderBy(x => x.Name))
+            {
+                <button type="button" class="saved-search-chip" @onclick="() => LoadSavedSearchAsync(saved)">@saved.Name</button>
+            }
+        </div>
+    </section>
+}
+
+@if (_searched)
+{
+    <div class="archive-results-summary">
+        <div class="metric-card"><span>Archive matches</span><strong>@_hits.Count</strong></div>
+        <div class="metric-card"><span>People matching filters</span><strong>@_people.Count</strong></div>
+        <div class="metric-card"><span>Categories</span><strong>@_hits.Select(x => x.Category).Distinct().Count()</strong></div>
+    </div>
+
+    @if (_people.Count > 0)
+    {
+        <section class="page-card">
+            <div class="section-heading-row"><h2>People</h2><span>@_people.Count result(s)</span></div>
+            <div class="people-search-results">
+                @foreach (var person in _people)
+                {
+                    <a class="person-search-result" href="@($"/people/{person.PersonId}")">
+                        <div>
+                            <strong>@person.DisplayName</strong>
+                            <span>@person.Lifespan</span>
+                        </div>
+                        <div class="person-search-meta">
+                            @if (!string.IsNullOrWhiteSpace(person.LegacyNumber)) { <span>Legacy @person.LegacyNumber</span> }
+                            @if (!string.IsNullOrWhiteSpace(person.Branch)) { <span>@person.Branch</span> }
+                            <span>@(person.IsLiving ? "Living" : "Deceased")</span>
+                        </div>
+                        @if (person.Flags.Count > 0)
+                        {
+                            <div class="person-search-flags">
+                                @foreach (var flag in person.Flags.Take(4)) { <span>@flag</span> }
+                            </div>
+                        }
+                    </a>
+                }
+            </div>
+        </section>
+    }
+
+    @foreach (var group in _hits.GroupBy(x => x.Category).OrderBy(x => x.Key))
+    {
+        <section class="page-card archive-result-group">
+            <div class="section-heading-row"><h2>@group.Key</h2><span>@group.Count()</span></div>
+            @foreach (var hit in group)
+            {
+                <div class="archive-hit">
+                    <div class="archive-hit-main">
+                        @if (!string.IsNullOrWhiteSpace(hit.Route))
+                        {
+                            <a href="@hit.Route"><strong>@hit.Title</strong></a>
+                        }
+                        else
+                        {
+                            <strong>@hit.Title</strong>
+                        }
+                        <p>@hit.Snippet</p>
+                    </div>
+                    <div class="archive-hit-meta">
+                        @if (!string.IsNullOrWhiteSpace(hit.PersonName)) { <span>@hit.PersonName</span> }
+                        @if (!string.IsNullOrWhiteSpace(hit.LegacyNumber)) { <span>Legacy @hit.LegacyNumber</span> }
+                        <small>@hit.EntityType</small>
+                    </div>
+                </div>
+            }
+        </section>
+    }
+
+    @if (_hits.Count == 0 && _people.Count == 0)
+    {
+        <section class="page-card empty-state">
+            <h2>No matches</h2>
+            <p>No records matched the current query and filters. A negative search can be recorded in Research Intelligence when it is genealogically significant.</p>
+        </section>
+    }
+}
+
+@code {
+    private string? _query;
+    private string? _legacy;
+    private string? _branch;
+    private string _living = "Any";
+    private int? _birthFrom;
+    private int? _birthTo;
+    private int? _deathFrom;
+    private int? _deathTo;
+    private bool _missingParent;
+    private bool _missingSource;
+    private bool _missingCemetery;
+    private bool _hasMilitary;
+    private bool _hasMedical;
+    private bool _showAdvanced;
+    private bool _busy;
+    private bool _searched;
+    private string? _savedSearchName;
+    private string? _message;
+    private IReadOnlyList<ArchiveSearchHit> _hits = [];
+    private IReadOnlyList<PersonAdvancedSearchHit> _people = [];
+    private List<SavedArchiveSearch> _savedSearches = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await IntelligenceStore.LoadAsync();
+        _savedSearches = state.SavedSearches;
+    }
+
+    private ArchiveSearchRequest CurrentRequest() => new(
+        Query: _query,
+        Branch: _branch,
+        LegacyNumber: _legacy,
+        Living: Enum.TryParse<LivingFilter>(_living, true, out var living) ? living : LivingFilter.Any,
+        BirthYearFrom: _birthFrom,
+        BirthYearTo: _birthTo,
+        DeathYearFrom: _deathFrom,
+        DeathYearTo: _deathTo,
+        MissingParent: _missingParent,
+        MissingSource: _missingSource,
+        MissingCemetery: _missingCemetery,
+        HasMilitary: _hasMilitary,
+        HasMedical: _hasMedical);
+
+    private async Task RunSearchAsync()
+    {
+        _busy = true;
+        _message = null;
+        try
+        {
+            var request = CurrentRequest();
+            _hits = await SearchService.SearchAsync(request);
+            _people = await SearchService.SearchPeopleAsync(request);
+            _searched = true;
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SaveSearchAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_savedSearchName)) { _message = "Enter a name for the saved search."; return; }
+        await IntelligenceStore.SaveSearchAsync(_savedSearchName, CurrentRequest());
+        var state = await IntelligenceStore.LoadAsync();
+        _savedSearches = state.SavedSearches;
+        _message = $"Saved search: {_savedSearchName}";
+        _savedSearchName = null;
+    }
+
+    private async Task LoadSavedSearchAsync(SavedArchiveSearch saved)
+    {
+        var request = saved.Request;
+        _query = request.Query; _legacy = request.LegacyNumber; _branch = request.Branch; _living = request.Living.ToString();
+        _birthFrom = request.BirthYearFrom; _birthTo = request.BirthYearTo; _deathFrom = request.DeathYearFrom; _deathTo = request.DeathYearTo;
+        _missingParent = request.MissingParent; _missingSource = request.MissingSource; _missingCemetery = request.MissingCemetery; _hasMilitary = request.HasMilitary; _hasMedical = request.HasMedical;
+        _showAdvanced = true;
+        await RunSearchAsync();
+    }
+
+    private async Task HandleSearchKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter") await RunSearchAsync();
+    }
+}
