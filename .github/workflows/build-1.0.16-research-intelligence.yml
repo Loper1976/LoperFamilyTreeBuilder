@@ -106,7 +106,7 @@ jobs:
           if ($launcher -notmatch 'TargetVersion = "1\.0\.16"') { throw 'Pre-upgrade backup target failed.' }
           if ($policy -notmatch 'Legacy Number') { throw 'Legacy Number preservation policy missing.' }
           if ($db -notmatch 'PersonAliases' -or $db -notmatch 'ResearchProofCases' -or $db -notmatch 'RepositorySearchLogs') { throw 'Research Intelligence DbSets are incomplete.' }
-          if ($service -notmatch 'GlobalSearchAsync' -or $service -notmatch 'GetDataQualityAsync') { throw 'Research Intelligence service contract incomplete.' }
+          if ($service -notmatch 'SearchAsync' -or $service -notmatch 'GetDashboardAsync') { throw 'Research Intelligence service contract incomplete.' }
           if ($global -notmatch '@page "/global-search"' -or $research -notmatch '@page "/research-intelligence"') { throw 'Research Intelligence pages are incomplete.' }
           foreach($required in @(
             'src/LoperFamilyTreeBuilder.Data/Migrations/20260809110000_ResearchIntelligence.cs',
