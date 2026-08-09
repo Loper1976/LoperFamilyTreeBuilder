@@ -32,6 +32,17 @@ if ($hash -ne 'cafec464c9acd07fdecbf39a5063ddd1fbe802f30062592de9e32a0ce7c33ecb'
 
 Expand-Archive -Path $zipPath -DestinationPath $Root -Force
 
+# Overlay small verified fixes for files that must remain byte-clean after package reconstruction.
+$fixRoot = Join-Path $env:GITHUB_WORKSPACE 'bootstrap/1.0.16/fixes'
+if (Test-Path $fixRoot) {
+    Get-ChildItem $fixRoot -File -Recurse | ForEach-Object {
+        $relative = [IO.Path]::GetRelativePath($fixRoot, $_.FullName)
+        $destination = Join-Path $Root $relative
+        New-Item -ItemType Directory -Force (Split-Path $destination -Parent) | Out-Null
+        Copy-Item $_.FullName $destination -Force
+    }
+}
+
 $props = Get-Content (Join-Path $Root 'Directory.Build.props') -Raw
 $msi = Get-Content (Join-Path $Root 'installer/LoperFamilyTreeBuilder.Msi/Package.wxs') -Raw
 $bundle = Get-Content (Join-Path $Root 'installer/LoperFamilyTreeBuilder.Setup/Bundle.wxs') -Raw
