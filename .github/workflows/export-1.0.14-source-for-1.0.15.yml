@@ -1,0 +1,67 @@
+name: Export reconstructed 1.0.14 source for 1.0.15
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.0.15-professional-report ]
+    paths:
+      - '.github/workflows/export-1.0.14-source-for-1.0.15.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create 1.0.14 step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.0.14-modern-profile.yml'
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) { if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break } }
+          if ($stepIndex -lt 0) { throw "Step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) { if ($lines[$i] -match '^      - ') { break }; if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break } }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) } elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "1.0.14 step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" -Encoding utf8
+
+      - name: Create foundation helper
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Create previous-release step runner'
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Create foundation helper'
+
+      - name: Reconstruct 1.0.14 source
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Reconstruct cumulative 1.0.11'
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply cumulative 1.0.12'
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply production 1.0.13'
+          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply modern person profile 1.0.14'
+
+      - name: Package source
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "$env:SOURCE_ROOT\*" -DestinationPath "$env:GITHUB_WORKSPACE\LoperFamilyTreeBuilder-1.0.14-source.zip" -Force
+
+      - name: Upload source artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.0.14-source-for-1.0.15
+          path: LoperFamilyTreeBuilder-1.0.14-source.zip
+          if-no-files-found: error
