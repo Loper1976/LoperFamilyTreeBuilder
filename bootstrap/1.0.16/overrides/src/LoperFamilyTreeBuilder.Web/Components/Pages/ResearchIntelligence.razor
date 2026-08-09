@@ -1,0 +1,242 @@
+@page "/research-intelligence"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize]
+@using LoperFamilyTreeBuilder.Core.Models
+@inject LoperFamilyTreeBuilder.Data.Services.GlobalArchiveSearchService SearchService
+@inject LoperFamilyTreeBuilder.Data.Services.ResearchIntelligenceStore IntelligenceStore
+
+<PageTitle>Research Intelligence - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header research-page-header">
+    <div>
+        <div class="eyebrow">Research Management</div>
+        <h1>Research Intelligence</h1>
+        <p>Evidence, proof reasoning, negative searches, aliases, data-quality gaps, and prioritized research work in one reviewable workspace.</p>
+    </div>
+    <div class="header-actions">
+        <a class="btn btn-primary" href="/archive-search">Global Archive Search</a>
+        <a class="btn btn-secondary" href="/ai-research">AI Research & Review</a>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="report-loading">Analyzing the archive…</div>
+}
+else
+{
+    <section class="research-metric-grid">
+        <div class="metric-card"><span>People</span><strong>@_quality!.People</strong></div>
+        <div class="metric-card"><span>Source gaps</span><strong>@_quality.MissingSources</strong></div>
+        <div class="metric-card"><span>Parent research</span><strong>@_quality.MissingParent</strong></div>
+        <div class="metric-card"><span>Open proof cases</span><strong>@_quality.OpenProofWorkspaces</strong></div>
+        <div class="metric-card"><span>Repository searches</span><strong>@_quality.RepositorySearches</strong></div>
+        <div class="metric-card @( _quality.DuplicateLegacyNumbers > 0 ? "metric-alert" : null)"><span>Legacy duplicates</span><strong>@_quality.DuplicateLegacyNumbers</strong></div>
+    </section>
+
+    <section class="page-card research-callout">
+        <div>
+            <h2>Preservation rule</h2>
+            <p>Research intelligence can identify conflicts, gaps, aliases, and duplicate candidates. It never renumbers, normalizes, recalculates, or silently changes Robert J. Loper Legacy Numbers.</p>
+        </div>
+        <a href="/research-tasks">Open Research Tasks</a>
+    </section>
+
+    <section class="page-card" id="quality">
+        <div class="section-heading-row">
+            <div><div class="eyebrow">Data Quality</div><h2>Research Gaps</h2></div>
+            <button type="button" class="btn btn-secondary" @onclick="RefreshAsync">Refresh Analysis</button>
+        </div>
+        <div class="quality-summary-grid">
+            <div><span>Missing birth</span><strong>@_quality.MissingBirth</strong></div>
+            <div><span>Deceased missing death</span><strong>@_quality.DeceasedMissingDeath</strong></div>
+            <div><span>Missing cemetery</span><strong>@_quality.MissingCemetery</strong></div>
+            <div><span>Missing primary photo</span><strong>@_quality.MissingPrimaryPhoto</strong></div>
+        </div>
+        <div class="quality-issue-list">
+            @foreach (var issue in _quality.Issues.Take(120))
+            {
+                <div class="quality-issue">
+                    <span class="quality-severity @issue.Severity.ToLowerInvariant()">@issue.Severity</span>
+                    <div>
+                        @if (!string.IsNullOrWhiteSpace(issue.Route))
+                        {
+                            <a href="@issue.Route"><strong>@(issue.PersonName ?? issue.Category)</strong></a>
+                        }
+                        else
+                        {
+                            <strong>@(issue.PersonName ?? issue.Category)</strong>
+                        }
+                        <p>@issue.Message</p>
+                    </div>
+                    <small>@issue.Category</small>
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card" id="aliases">
+        <div class="section-heading-row"><div><div class="eyebrow">Name Intelligence</div><h2>Aliases & Name Variants</h2></div><span>@_state!.Aliases.Count</span></div>
+        <div class="research-form-grid">
+            <label>Person<select class="form-control" @bind="_aliasPerson"><option value="">Select person…</option>@foreach (var p in _people){<option value="@p.PersonId">@p.DisplayName @(!string.IsNullOrWhiteSpace(p.LegacyNumber) ? $"· {p.LegacyNumber}" : "")</option>}</select></label>
+            <label>Alias / alternate name<input class="form-control" @bind="_aliasName" placeholder="Nickname, maiden name, alternate spelling…" /></label>
+            <label>Alias type<select class="form-control" @bind="_aliasType"><option>Alternate Name</option><option>Nickname</option><option>Maiden Name</option><option>Married Name</option><option>Alternate Spelling</option><option>Initials</option><option>Transcription Variant</option></select></label>
+            <label>Notes<input class="form-control" @bind="_aliasNotes" /></label>
+        </div>
+        <button type="button" class="btn btn-primary" @onclick="AddAliasAsync">Add Alias</button>
+        <div class="research-record-list">
+            @foreach (var alias in _state.Aliases.OrderByDescending(x => x.CreatedUtc).Take(80))
+            {
+                <div class="research-record"><div><strong>@alias.Alias</strong><span>@alias.AliasType · @PersonName(alias.PersonId)</span>@if(!string.IsNullOrWhiteSpace(alias.Notes)){<p>@alias.Notes</p>}</div><button type="button" class="link-button danger" @onclick="() => DeleteAliasAsync(alias.Id)">Remove</button></div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card" id="proof">
+        <div class="section-heading-row"><div><div class="eyebrow">Genealogical Proof</div><h2>Evidence & Proof Workspace</h2></div><span>@_state.ProofWorkspaces.Count</span></div>
+        <p class="section-intro">Record the question, competing answer, evidence for and against, conflicts, negative searches, reasoning, and conclusion. The conclusion remains a research work product until an authorized person updates genealogy.</p>
+        <div class="research-form-grid two-column">
+            <label>Person (optional)<select class="form-control" @bind="_proofPerson"><option value="">Family / branch question</option>@foreach (var p in _people){<option value="@p.PersonId">@p.DisplayName</option>}</select></label>
+            <label>Research status<select class="form-control" @bind="_proofStatus"><option>Under Review</option><option>Needs Research</option><option>Conflicting Evidence</option><option>Probable</option><option>Verified</option><option>Disputed</option><option>Resolved</option><option>Archived</option></select></label>
+            <label class="span-two">Research question<textarea class="form-control" rows="2" @bind="_proofQuestion" placeholder="Example: Who was Michael Edward Loper's father?"></textarea></label>
+            <label>Candidate answer<input class="form-control" @bind="_candidateAnswer" /></label>
+            <label>Source references<input class="form-control" @bind="_candidateSources" /></label>
+            <label>Evidence for<textarea class="form-control" rows="3" @bind="_evidenceFor"></textarea></label>
+            <label>Evidence against<textarea class="form-control" rows="3" @bind="_evidenceAgainst"></textarea></label>
+            <label>Conflicting evidence<textarea class="form-control" rows="3" @bind="_conflicts"></textarea></label>
+            <label>Negative searches<textarea class="form-control" rows="3" @bind="_negativeSearches" placeholder="Repositories/collections searched with no relevant record found"></textarea></label>
+            <label class="span-two">Researcher reasoning<textarea class="form-control" rows="3" @bind="_reasoning"></textarea></label>
+            <label class="span-two">Conclusion (optional)<textarea class="form-control" rows="2" @bind="_conclusion"></textarea></label>
+        </div>
+        <button type="button" class="btn btn-primary" @onclick="AddProofAsync">Create Proof Workspace</button>
+        <div class="proof-workspace-list">
+            @foreach (var proof in _state.ProofWorkspaces.OrderByDescending(x => x.UpdatedUtc).Take(50))
+            {
+                <article class="proof-workspace">
+                    <div class="proof-workspace-header"><div><span class="status-pill">@proof.Status</span><h3>@proof.ResearchQuestion</h3>@if(proof.PersonId.HasValue){<a href="@($"/people/{proof.PersonId}")">@PersonName(proof.PersonId.Value)</a>}</div><button type="button" class="link-button danger" @onclick="() => DeleteProofAsync(proof.Id)">Delete</button></div>
+                    @foreach (var candidate in proof.Candidates)
+                    {
+                        <div class="proof-candidate"><strong>@candidate.CandidateAnswer</strong><div class="proof-evidence-grid"><div><span>Evidence for</span><p>@TextOrDash(candidate.EvidenceFor)</p></div><div><span>Evidence against</span><p>@TextOrDash(candidate.EvidenceAgainst)</p></div><div><span>Conflicts</span><p>@TextOrDash(candidate.ConflictingEvidence)</p></div><div><span>Negative searches</span><p>@TextOrDash(candidate.NegativeSearches)</p></div></div>@if(!string.IsNullOrWhiteSpace(candidate.SourceReferences)){<small>Sources: @candidate.SourceReferences</small>}</div>
+                    }
+                    @if(!string.IsNullOrWhiteSpace(proof.ResearcherReasoning)){<div class="proof-reasoning"><span>Reasoning</span><p>@proof.ResearcherReasoning</p></div>}
+                    @if(!string.IsNullOrWhiteSpace(proof.Conclusion)){<div class="proof-conclusion"><span>Conclusion</span><p>@proof.Conclusion</p></div>}
+                </article>
+            }
+        </div>
+    </section>
+
+    <section class="page-card" id="repositories">
+        <div class="section-heading-row"><div><div class="eyebrow">Research Log</div><h2>Repository Search History</h2></div><span>@_state.RepositorySearches.Count</span></div>
+        <div class="research-form-grid two-column">
+            <label>Person (optional)<select class="form-control" @bind="_repoPerson"><option value="">General / branch research</option>@foreach (var p in _people){<option value="@p.PersonId">@p.DisplayName</option>}</select></label>
+            <label>Repository<input class="form-control" @bind="_repository" placeholder="Archive, courthouse, library, cemetery, website…" /></label>
+            <label>Collection<input class="form-control" @bind="_collection" /></label>
+            <label>Search query<input class="form-control" @bind="_repoQuery" /></label>
+            <label class="span-two">Results<textarea class="form-control" rows="2" @bind="_repoResults"></textarea></label>
+            <label class="checkbox-label"><input type="checkbox" @bind="_negativeSearch" /> Negative search: no relevant record found</label>
+            <label>Follow-up action<input class="form-control" @bind="_repoFollowUp" /></label>
+            <label class="span-two">Notes<textarea class="form-control" rows="2" @bind="_repoNotes"></textarea></label>
+        </div>
+        <button type="button" class="btn btn-primary" @onclick="AddRepositorySearchAsync">Record Search</button>
+        <div class="research-record-list">
+            @foreach (var item in _state.RepositorySearches.OrderByDescending(x => x.SearchDateUtc).Take(80))
+            {
+                <div class="research-record repository-record"><div><div class="record-title-row"><strong>@item.Repository</strong>@if(item.NegativeSearch){<span class="negative-search-badge">Negative search</span>}</div><span>@item.SearchDateUtc.ToLocalTime().ToString("MMM d, yyyy") · @item.SearchQuery</span>@if(item.PersonId.HasValue){<a href="@($"/people/{item.PersonId}")">@PersonName(item.PersonId.Value)</a>}@if(!string.IsNullOrWhiteSpace(item.Results)){<p>@item.Results</p>}@if(!string.IsNullOrWhiteSpace(item.FollowUpAction)){<small>Follow-up: @item.FollowUpAction</small>}</div><button type="button" class="link-button danger" @onclick="() => DeleteRepositoryAsync(item.Id)">Remove</button></div>
+            }
+        </div>
+    </section>
+
+    <section class="page-card" id="plans">
+        <div class="section-heading-row"><div><div class="eyebrow">Task Planning</div><h2>Advanced Research Plan</h2></div><span>@_state.ResearchPlans.Count(x => !x.Archived)</span></div>
+        <div class="research-form-grid two-column">
+            <label>Person (optional)<select class="form-control" @bind="_planPerson"><option value="">General / branch research</option>@foreach (var p in _people){<option value="@p.PersonId">@p.DisplayName</option>}</select></label>
+            <label>Priority<select class="form-control" @bind="_planPriority"><option>Low</option><option>Normal</option><option>High</option><option>Critical</option></select></label>
+            <label class="span-two">Research question<input class="form-control" @bind="_planQuestion" /></label>
+            <label>Due date<input class="form-control" type="date" @bind="_planDueDate" /></label>
+            <label>Assigned researcher<input class="form-control" @bind="_planResearcher" /></label>
+            <label>Repository<input class="form-control" @bind="_planRepository" /></label>
+            <label>Related evidence<input class="form-control" @bind="_planEvidence" /></label>
+            <label class="span-two">Follow-up action<input class="form-control" @bind="_planFollowUp" /></label>
+        </div>
+        <button type="button" class="btn btn-primary" @onclick="AddResearchPlanAsync">Add Research Plan</button>
+        <div class="research-record-list">
+            @foreach (var plan in _state.ResearchPlans.Where(x => !x.Archived).OrderBy(x => PriorityOrder(x.Priority)).ThenBy(x => x.DueDate).Take(80))
+            {
+                <div class="research-record plan-record"><div><div class="record-title-row"><span class="priority-pill @plan.Priority.ToLowerInvariant()">@plan.Priority</span><strong>@plan.ResearchQuestion</strong></div>@if(plan.PersonId.HasValue){<a href="@($"/people/{plan.PersonId}")">@PersonName(plan.PersonId.Value)</a>}<span>@if(plan.DueDate.HasValue){<text>Due @plan.DueDate.Value.ToString("MMM d, yyyy")</text>}@if(!string.IsNullOrWhiteSpace(plan.AssignedResearcher)){<text> · @plan.AssignedResearcher</text>}</span>@if(!string.IsNullOrWhiteSpace(plan.FollowUpAction)){<p>Next: @plan.FollowUpAction</p>}</div><button type="button" class="link-button" @onclick="() => ArchivePlanAsync(plan)">Archive</button></div>
+            }
+        </div>
+    </section>
+}
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="research-toast" role="status">@_message</div>
+}
+
+@code {
+    private bool _loading = true;
+    private ResearchQualitySummary? _quality;
+    private ResearchIntelligenceState? _state;
+    private IReadOnlyList<PersonAdvancedSearchHit> _people = [];
+    private string? _message;
+
+    private string? _aliasPerson; private string? _aliasName; private string _aliasType="Alternate Name"; private string? _aliasNotes;
+    private string? _proofPerson; private string _proofStatus="Under Review"; private string? _proofQuestion; private string? _candidateAnswer; private string? _candidateSources; private string? _evidenceFor; private string? _evidenceAgainst; private string? _conflicts; private string? _negativeSearches; private string? _reasoning; private string? _conclusion;
+    private string? _repoPerson; private string? _repository; private string? _collection; private string? _repoQuery; private string? _repoResults; private bool _negativeSearch; private string? _repoFollowUp; private string? _repoNotes;
+    private string? _planPerson; private string _planPriority="Normal"; private string? _planQuestion; private DateOnly? _planDueDate; private string? _planResearcher; private string? _planRepository; private string? _planEvidence; private string? _planFollowUp;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading=true;
+        _state=await IntelligenceStore.LoadAsync();
+        _quality=await SearchService.GetQualitySummaryAsync();
+        _people=await SearchService.SearchPeopleAsync(new ArchiveSearchRequest(),5000);
+        _loading=false;
+    }
+
+    private async Task AddAliasAsync()
+    {
+        if(!TryGuid(_aliasPerson,out var personId)||string.IsNullOrWhiteSpace(_aliasName)){_message="Select a person and enter an alias.";return;}
+        await IntelligenceStore.AddAliasAsync(new PersonNameAliasRecord{PersonId=personId,Alias=_aliasName.Trim(),AliasType=_aliasType,Notes=_aliasNotes});
+        _aliasName=null;_aliasNotes=null;await ReloadStateAsync();_message="Alias saved. Global search will now find this name variant.";
+    }
+    private async Task DeleteAliasAsync(Guid id){await IntelligenceStore.DeleteAliasAsync(id);await ReloadStateAsync();}
+
+    private async Task AddProofAsync()
+    {
+        if(string.IsNullOrWhiteSpace(_proofQuestion)){_message="Enter a research question.";return;}
+        Guid? personId=TryGuid(_proofPerson,out var p)?p:null;
+        var workspace=new ProofWorkspaceRecord{PersonId=personId,ResearchQuestion=_proofQuestion.Trim(),Status=_proofStatus,ResearcherReasoning=_reasoning,Conclusion=_conclusion};
+        if(!string.IsNullOrWhiteSpace(_candidateAnswer)||!string.IsNullOrWhiteSpace(_evidenceFor)||!string.IsNullOrWhiteSpace(_evidenceAgainst))
+            workspace.Candidates.Add(new ProofCandidateRecord{CandidateAnswer=string.IsNullOrWhiteSpace(_candidateAnswer)?"Candidate answer":_candidateAnswer.Trim(),EvidenceFor=_evidenceFor,EvidenceAgainst=_evidenceAgainst,ConflictingEvidence=_conflicts,NegativeSearches=_negativeSearches,SourceReferences=_candidateSources});
+        await IntelligenceStore.AddProofWorkspaceAsync(workspace);
+        _proofQuestion=_candidateAnswer=_candidateSources=_evidenceFor=_evidenceAgainst=_conflicts=_negativeSearches=_reasoning=_conclusion=null;await ReloadAllAsync();_message="Proof workspace created. No genealogy facts were changed.";
+    }
+    private async Task DeleteProofAsync(Guid id){await IntelligenceStore.DeleteProofWorkspaceAsync(id);await ReloadAllAsync();}
+
+    private async Task AddRepositorySearchAsync()
+    {
+        if(string.IsNullOrWhiteSpace(_repository)||string.IsNullOrWhiteSpace(_repoQuery)){_message="Repository and search query are required.";return;}
+        Guid? personId=TryGuid(_repoPerson,out var p)?p:null;
+        await IntelligenceStore.AddRepositorySearchAsync(new RepositorySearchRecord{PersonId=personId,Repository=_repository.Trim(),Collection=_collection,SearchQuery=_repoQuery.Trim(),Results=_repoResults,NegativeSearch=_negativeSearch,Notes=_repoNotes,FollowUpAction=_repoFollowUp});
+        _collection=_repoQuery=_repoResults=_repoFollowUp=_repoNotes=null;_negativeSearch=false;await ReloadAllAsync();_message="Repository search recorded, including negative-search status.";
+    }
+    private async Task DeleteRepositoryAsync(Guid id){await IntelligenceStore.DeleteRepositorySearchAsync(id);await ReloadAllAsync();}
+
+    private async Task AddResearchPlanAsync()
+    {
+        if(string.IsNullOrWhiteSpace(_planQuestion)){_message="Enter a research question.";return;}
+        Guid? personId=TryGuid(_planPerson,out var p)?p:null;
+        await IntelligenceStore.AddResearchPlanAsync(new ResearchPlanRecord{PersonId=personId,ResearchQuestion=_planQuestion.Trim(),Priority=_planPriority,DueDate=_planDueDate,AssignedResearcher=_planResearcher,Repository=_planRepository,RelatedEvidence=_planEvidence,FollowUpAction=_planFollowUp});
+        _planQuestion=_planResearcher=_planRepository=_planEvidence=_planFollowUp=null;_planDueDate=null;await ReloadStateAsync();_message="Research plan added.";
+    }
+    private async Task ArchivePlanAsync(ResearchPlanRecord plan){plan.Archived=true;plan.Status="Archived";await IntelligenceStore.UpdateResearchPlanAsync(plan);await ReloadStateAsync();}
+
+    private async Task ReloadStateAsync(){_state=await IntelligenceStore.LoadAsync();StateHasChanged();}
+    private async Task ReloadAllAsync(){_state=await IntelligenceStore.LoadAsync();_quality=await SearchService.GetQualitySummaryAsync();StateHasChanged();}
+    private string PersonName(Guid id)=>_people.FirstOrDefault(x=>x.PersonId==id)?.DisplayName??id.ToString();
+    private static bool TryGuid(string? value,out Guid id)=>Guid.TryParse(value,out id);
+    private static string TextOrDash(string? value)=>string.IsNullOrWhiteSpace(value)?"—":value;
+    private static int PriorityOrder(string value)=>value.ToLowerInvariant() switch{"critical"=>0,"high"=>1,"normal"=>2,"low"=>3,_=>4};
+}
