@@ -1,0 +1,35 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+
+  <Bundle Name="Loper Family Tree Builder"
+          Manufacturer="Phil Loper"
+          Version="1.0.16.0"
+          UpgradeCode="{B90A31E4-FA5B-4DDC-8802-8D07E4206C1F}">
+
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="hyperlinkLicense"
+          LicenseUrl=""
+          ShowVersion="yes"
+          LaunchTarget="[ProgramFiles64Folder]Loper Family Tree Builder\LoperFamilyTreeBuilder.Launcher.exe"
+          LaunchWorkingFolder="[ProgramFiles64Folder]Loper Family Tree Builder" />
+    </BootstrapperApplication>
+
+    <Chain>
+      <MsiPackage
+          SourceFile="$(PayloadDir)\SqlLocalDB.msi"
+          Compressed="yes"
+          Permanent="yes"
+          Vital="yes">
+        <MsiProperty
+            Name="IACCEPTSQLLOCALDBLICENSETERMS"
+            Value="YES" />
+      </MsiPackage>
+
+      <MsiPackage
+          SourceFile="$(PayloadDir)\LoperFamilyTreeBuilder.msi"
+          Compressed="yes"
+          Vital="yes" />
+    </Chain>
+  </Bundle>
+</Wix>
