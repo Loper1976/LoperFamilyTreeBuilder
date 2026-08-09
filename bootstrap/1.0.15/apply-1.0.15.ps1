@@ -29,20 +29,22 @@ Replace-Exact 'installer/LoperFamilyTreeBuilder.Msi/Package.wxs' 'Version="1.0.1
 Replace-Exact 'installer/LoperFamilyTreeBuilder.Setup/Bundle.wxs' 'Version="1.0.14.0"' 'Version="1.0.15.0"'
 Replace-Exact 'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs' 'private const string TargetVersion = "1.0.14";' 'private const string TargetVersion = "1.0.15";'
 
-# Update health and release version payloads.
-$programPath = Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/Program.cs'
-$program = Get-Content $programPath -Raw
-$program = $program.Replace('version = "1.0.14"', 'version = "1.0.15"')
-Set-Content $programPath $program -Encoding utf8 -NoNewline
-
-foreach ($relative in @(
+# Align visible, health, and diagnostics version reporting.
+$versionFiles = @(
+    'src/LoperFamilyTreeBuilder.Web/Program.cs',
     'src/LoperFamilyTreeBuilder.Web/Components/Pages/About.razor',
-    'src/LoperFamilyTreeBuilder.Web/Components/Pages/ProductionRelease.razor'
-)) {
+    'src/LoperFamilyTreeBuilder.Web/Components/Pages/ProductionRelease.razor',
+    'src/LoperFamilyTreeBuilder.Data/Services/SystemDiagnosticsService.cs'
+)
+foreach ($relative in $versionFiles) {
     $path = Join-Path $Root $relative
-    $text = Get-Content $path -Raw
-    $text = $text.Replace('1.0.14', '1.0.15')
-    Set-Content $path $text -Encoding utf8 -NoNewline
+    if (Test-Path $path) {
+        $text = Get-Content $path -Raw
+        $text = $text.Replace('1.0.12', '1.0.15')
+        $text = $text.Replace('1.0.14', '1.0.15')
+        $text = $text.Replace('Modern Person Profile', 'Professional Detailed Person Report')
+        Set-Content $path $text -Encoding utf8 -NoNewline
+    }
 }
 
 # Register the report assembly service.
