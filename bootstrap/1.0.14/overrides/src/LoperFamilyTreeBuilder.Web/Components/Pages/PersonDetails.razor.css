@@ -1,0 +1,488 @@
+/* 1.0.14 - Modern desktop Person Profile
+   Visual-only update. No genealogy data or Legacy Number behavior is changed. */
+
+.person-profile-shell {
+    --profile-surface: #ffffff;
+    --profile-surface-soft: #f7f9fc;
+    --profile-surface-muted: #f1f4f8;
+    --profile-border: #dde4ec;
+    --profile-border-strong: #cbd5e1;
+    --profile-text: #17212b;
+    --profile-muted: #667085;
+    --profile-accent: #244b73;
+    --profile-accent-soft: #eaf1f8;
+    --profile-success-soft: #edf7f0;
+    --profile-shadow: 0 10px 28px rgba(22, 34, 48, .075);
+    max-width: 1500px;
+    margin: 0 auto;
+    padding-bottom: 36px;
+}
+
+.person-profile-shell .page-card {
+    border: 1px solid var(--profile-border);
+    border-radius: 16px;
+    background: var(--profile-surface);
+    box-shadow: 0 3px 14px rgba(22, 34, 48, .045);
+}
+
+.person-profile-shell .profile-hero {
+    position: relative;
+    grid-template-columns: 112px minmax(0, 1fr) auto;
+    gap: 24px;
+    align-items: center;
+    padding: 24px 26px;
+    overflow: hidden;
+    border-color: #d7e0e9;
+    border-radius: 20px;
+    box-shadow: var(--profile-shadow);
+}
+
+.person-profile-shell .profile-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: var(--profile-accent);
+}
+
+.person-profile-shell .profile-avatar {
+    width: 108px;
+    height: 108px;
+    border-radius: 24px;
+    border: 1px solid #d2dce7;
+    background: linear-gradient(145deg, #f7f9fc, #e7edf4);
+    color: #29445f;
+    box-shadow: inset 0 0 0 5px rgba(255,255,255,.65);
+    font-size: 34px;
+    font-weight: 750;
+    letter-spacing: .02em;
+}
+
+.person-profile-shell .profile-kicker {
+    margin-bottom: 4px;
+    color: var(--profile-accent);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .14em;
+}
+
+.person-profile-shell .profile-identity h1 {
+    margin: 0 0 10px;
+    color: var(--profile-text);
+    font-size: clamp(30px, 2.35vw, 40px);
+    font-weight: 720;
+    letter-spacing: -.025em;
+}
+
+.person-profile-shell .profile-badges {
+    gap: 7px;
+}
+
+.person-profile-shell .status-pill {
+    border: 1px solid #d7e0e9;
+    border-radius: 999px;
+    background: var(--profile-surface-soft);
+    color: #435466;
+    padding: 5px 9px;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.person-profile-shell .legacy-profile-block {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px 12px;
+    margin-top: 15px;
+    padding: 9px 12px;
+    border: 1px solid #ccd9e6;
+    border-radius: 10px;
+    background: var(--profile-accent-soft);
+}
+
+.person-profile-shell .legacy-profile-block span,
+.person-profile-shell .legacy-profile-block small {
+    color: #52687e;
+}
+
+.person-profile-shell .legacy-profile-block strong {
+    color: #203f5d;
+    font-size: 17px;
+}
+
+.person-profile-shell .profile-actions {
+    align-self: start;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    min-width: 190px;
+}
+
+.person-profile-shell .profile-actions .primary-action,
+.person-profile-shell .profile-actions .secondary-action {
+    min-height: 38px;
+    border-radius: 9px;
+    padding-inline: 15px;
+}
+
+.person-profile-shell .profile-navigation-row {
+    margin: 11px 3px 13px;
+    padding: 2px 0;
+}
+
+.person-profile-shell .profile-navigation-row .secondary-action {
+    min-height: 34px;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.person-profile-shell .profile-internal-id {
+    color: #8793a1;
+    font-size: 10px;
+    letter-spacing: .01em;
+}
+
+.person-profile-shell .profile-tabs {
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+    gap: 5px;
+    margin: 0 0 18px;
+    padding: 6px;
+    border: 1px solid #dce4ec;
+    border-radius: 13px;
+    background: rgba(255,255,255,.96);
+    box-shadow: 0 6px 20px rgba(22,34,48,.055);
+    backdrop-filter: blur(8px);
+}
+
+.person-profile-shell .profile-tab {
+    min-height: 34px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    color: #48586a;
+    font-size: 12px;
+    font-weight: 600;
+    transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+
+.person-profile-shell .profile-tab:hover {
+    background: #f0f4f8;
+    color: #1f3347;
+}
+
+.person-profile-shell .profile-tab.active {
+    background: #21384f;
+    color: #fff;
+    box-shadow: 0 3px 9px rgba(26, 49, 71, .22);
+}
+
+.person-profile-shell .profile-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr);
+    gap: 18px;
+}
+
+.person-profile-shell .profile-grid > .page-card {
+    padding: 20px 22px;
+}
+
+.person-profile-shell .profile-grid h2,
+.person-profile-shell .family-section-card h2,
+.person-profile-shell .relationship-manager-card h2,
+.person-profile-shell .audit-card h2,
+.person-profile-shell .profile-module-placeholder h2 {
+    color: #243444;
+    font-size: 17px;
+    font-weight: 720;
+    letter-spacing: -.012em;
+}
+
+.person-profile-shell .profile-definition-list > div {
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 18px;
+    padding: 11px 0;
+    border-bottom-color: #edf1f5;
+}
+
+.person-profile-shell .profile-definition-list dt {
+    color: #788595;
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: .015em;
+    text-transform: uppercase;
+}
+
+.person-profile-shell .profile-definition-list dd {
+    color: #243444;
+    font-weight: 650;
+}
+
+.person-profile-shell .profile-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+}
+
+.person-profile-shell .profile-stat-grid button {
+    min-height: 82px;
+    padding: 15px;
+    border: 1px solid #dfe6ee;
+    border-radius: 12px;
+    background: linear-gradient(180deg, #fbfcfe 0%, #f6f8fb 100%);
+    transition: transform .14s ease, border-color .14s ease, box-shadow .14s ease;
+}
+
+.person-profile-shell .profile-stat-grid button:hover {
+    transform: translateY(-1px);
+    border-color: #c7d5e2;
+    box-shadow: 0 5px 14px rgba(30,48,66,.07);
+}
+
+.person-profile-shell .profile-stat-grid strong {
+    color: #223d58;
+    font-size: 27px;
+    font-weight: 730;
+}
+
+.person-profile-shell .profile-stat-grid span {
+    margin-top: 4px;
+    color: #6f7e8e;
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: .035em;
+}
+
+.person-profile-shell .legacy-protection-panel {
+    grid-template-columns: minmax(240px, .42fr) minmax(0, 1fr);
+    gap: 22px;
+    padding: 17px 18px;
+    border: 1px solid #cfdbe7;
+    border-left: 4px solid var(--profile-accent);
+    border-radius: 12px;
+    background: #f7fafc;
+    color: #4c5d6e;
+}
+
+.person-profile-shell .legacy-protection-panel strong {
+    color: #213f5c;
+    font-size: 20px;
+}
+
+.person-profile-shell .family-layout {
+    grid-template-columns: minmax(0, 1.65fr) minmax(340px, .75fr);
+    gap: 18px;
+}
+
+.person-profile-shell .family-columns {
+    gap: 18px;
+}
+
+.person-profile-shell .family-section-card,
+.person-profile-shell .relationship-manager-card {
+    padding: 19px 20px;
+}
+
+.person-profile-shell .family-person-row,
+.person-profile-shell .relationship-result-row,
+.person-profile-shell .document-row,
+.person-profile-shell .citation-row,
+.person-profile-shell .audit-row {
+    border-radius: 10px;
+}
+
+.person-profile-shell .family-person-row {
+    padding: 11px 2px;
+}
+
+.person-profile-shell .family-person-row a,
+.person-profile-shell .relationship-result-row strong {
+    color: #244b73;
+    font-weight: 680;
+}
+
+.person-profile-shell .relationship-meta {
+    color: #7a8795;
+    font-size: 11px;
+}
+
+.person-profile-shell .relationship-manager-card {
+    position: sticky;
+    top: 68px;
+}
+
+.person-profile-shell .archive-upload-grid,
+.person-profile-shell .relationship-form-grid {
+    gap: 13px;
+}
+
+.person-profile-shell input,
+.person-profile-shell select,
+.person-profile-shell textarea {
+    border-color: #d6dee7;
+    border-radius: 9px;
+    background: #fff;
+}
+
+.person-profile-shell input:focus,
+.person-profile-shell select:focus,
+.person-profile-shell textarea:focus {
+    border-color: #9eb4c8;
+    box-shadow: 0 0 0 3px rgba(52, 96, 138, .10);
+}
+
+.person-profile-shell .media-card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+}
+
+.person-profile-shell .media-card {
+    overflow: hidden;
+    border: 1px solid #dfe6ed;
+    border-radius: 13px;
+    background: #fff;
+    box-shadow: 0 3px 12px rgba(22,34,48,.045);
+}
+
+.person-profile-shell .media-card img {
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+}
+
+.person-profile-shell .document-row,
+.person-profile-shell .citation-row,
+.person-profile-shell .audit-row {
+    border: 1px solid #e0e6ed;
+    background: #fbfcfd;
+    padding: 13px 14px;
+}
+
+.person-profile-shell .module-status-chip {
+    border-radius: 999px;
+    background: var(--profile-accent-soft);
+    color: #315a7e;
+}
+
+.person-profile-shell .empty-inline {
+    color: #7a8795;
+}
+
+@media (max-width: 1100px) {
+    .person-profile-shell .profile-hero {
+        grid-template-columns: 92px minmax(0, 1fr);
+    }
+
+    .person-profile-shell .profile-avatar {
+        width: 88px;
+        height: 88px;
+        border-radius: 20px;
+        font-size: 29px;
+    }
+
+    .person-profile-shell .profile-actions {
+        grid-column: 1 / -1;
+        justify-content: flex-start;
+        padding-left: 116px;
+    }
+
+    .person-profile-shell .family-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .person-profile-shell .relationship-manager-card {
+        position: static;
+    }
+}
+
+@media (max-width: 820px) {
+    .person-profile-shell .profile-hero {
+        grid-template-columns: 72px minmax(0, 1fr);
+        gap: 16px;
+        padding: 19px;
+        border-radius: 16px;
+    }
+
+    .person-profile-shell .profile-avatar {
+        width: 68px;
+        height: 68px;
+        border-radius: 16px;
+        font-size: 24px;
+    }
+
+    .person-profile-shell .profile-identity h1 {
+        font-size: 28px;
+    }
+
+    .person-profile-shell .profile-actions {
+        padding-left: 88px;
+    }
+
+    .person-profile-shell .profile-tabs {
+        position: static;
+    }
+
+    .person-profile-shell .profile-grid,
+    .person-profile-shell .family-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .person-profile-shell .profile-wide-card {
+        grid-column: auto;
+    }
+
+    .person-profile-shell .legacy-protection-panel {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .person-profile-shell .profile-hero {
+        grid-template-columns: 1fr;
+    }
+
+    .person-profile-shell .profile-avatar {
+        width: 76px;
+        height: 76px;
+    }
+
+    .person-profile-shell .profile-actions {
+        padding-left: 0;
+    }
+
+    .person-profile-shell .profile-navigation-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .person-profile-shell .profile-internal-id {
+        grid-column: 1 / -1;
+        grid-row: 2;
+    }
+
+    .person-profile-shell .profile-stat-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .person-profile-shell .profile-definition-list > div {
+        grid-template-columns: 1fr;
+        gap: 3px;
+    }
+}
+
+@media print {
+    .person-profile-shell .profile-tabs,
+    .person-profile-shell .profile-actions,
+    .person-profile-shell .profile-navigation-row,
+    .person-profile-shell .relationship-manager-card,
+    .person-profile-shell .form-actions {
+        display: none !important;
+    }
+
+    .person-profile-shell {
+        max-width: none;
+        padding: 0;
+    }
+
+    .person-profile-shell .page-card,
+    .person-profile-shell .profile-hero {
+        box-shadow: none;
+        break-inside: avoid;
+    }
+}
