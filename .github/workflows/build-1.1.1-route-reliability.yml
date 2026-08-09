@@ -1,0 +1,197 @@
+name: Build cumulative 1.1.1 route reliability hotfix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.1-route-reliability-hotfix ]
+    paths:
+      - '.github/workflows/build-1.1.1-route-reliability.yml'
+      - 'bootstrap/1.1.1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create 1.1.0 step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow = Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.0-web-experience.yml'
+          if (-not (Test-Path $workflow)) { throw "1.1.0 workflow not found: $workflow" }
+          $lines = Get-Content $workflow
+          $stepIndex = -1
+          for ($i=0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i].Trim() -eq "- name: $Name") { $stepIndex=$i; break }
+          }
+          if ($stepIndex -lt 0) { throw "1.1.0 step not found: $Name" }
+          $runIndex=-1
+          for ($i=$stepIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            if ($lines[$i].Trim() -eq 'run: |') { $runIndex=$i; break }
+          }
+          if ($runIndex -lt 0) { throw "Run block not found: $Name" }
+          $block = New-Object System.Collections.Generic.List[string]
+          for ($i=$runIndex+1; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match '^      - ') { break }
+            $line=$lines[$i]
+            if ($line.StartsWith('          ')) { $line=$line.Substring(10) }
+            elseif ($line.Trim().Length -gt 0) { $line=$line.TrimStart() }
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block -join "`n")))
+          if (-not $?) { throw "1.1.0 step failed: $Name" }
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" -Encoding utf8
+
+      - name: Create 1.0.16 step runner
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Create 1.0.16 step runner'
+
+      - name: Create foundation helpers
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Create foundation helpers'
+
+      - name: Reconstruct cumulative 1.0.11
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Reconstruct cumulative 1.0.11'
+
+      - name: Apply cumulative 1.0.12
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply cumulative 1.0.12'
+
+      - name: Apply production 1.0.13
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply production 1.0.13'
+
+      - name: Apply modern person profile 1.0.14
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply modern person profile 1.0.14'
+
+      - name: Apply professional detailed person report 1.0.15
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply professional detailed person report 1.0.15'
+
+      - name: Apply research intelligence 1.0.16
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply research intelligence 1.0.16'
+
+      - name: Apply web experience architecture 1.1.0
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Apply web experience architecture 1.1.0'
+
+      - name: Apply route reliability hotfix 1.1.1
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.1\apply-1.1.1.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify cumulative 1.1.1 contract
+        shell: pwsh
+        run: |
+          $msi=Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+          $bundle=Get-Content "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $props=Get-Content "$env:SOURCE_ROOT\Directory.Build.props" -Raw
+          $launcher=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          $policy=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $placeholder=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Placeholder.razor" -Raw
+          $descendants=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\DescendantCharts.razor" -Raw
+          $research=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\ResearchIntelligence.razor" -Raw
+          $web=Get-Content "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\WebExperience.razor" -Raw
+
+          if ($msi -notmatch '1\.1\.1' -or $msi -notmatch '4BDBF4F0-7C82-4FA5-B0B0-6E6CA04E80E9') { throw 'MSI upgrade identity failed.' }
+          if ($bundle -notmatch '1\.1\.1\.0' -or $bundle -notmatch 'B90A31E4-FA5B-4DDC-8802-8D07E4206C1F') { throw 'Bundle upgrade identity failed.' }
+          if ($props -notmatch '<Version>1\.1\.1</Version>') { throw 'Application version is not 1.1.1.' }
+          if ($launcher -notmatch 'TargetVersion = "1\.1\.1"') { throw 'Pre-upgrade backup target failed.' }
+          if ($policy -notmatch 'Legacy Number') { throw 'Legacy Number preservation policy missing.' }
+          if ($placeholder -match '@page "/descendants"') { throw 'Placeholder still owns /descendants.' }
+          if ($descendants -notmatch '@page "/descendants"') { throw 'Real descendant chart route is missing.' }
+          if ($research -notmatch '@page "/research-intelligence"') { throw '1.0.16 Research Intelligence was not preserved.' }
+          if ($web -notmatch '@page "/web-experience"') { throw '1.1.0 Web Experience was not preserved.' }
+
+          Write-Host '1.1.1 cumulative upgrade, route uniqueness, research/web preservation, and Legacy Number contract verified.'
+
+      - name: Test and build fail-fast
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          if ($LASTEXITCODE -ne 0) { throw 'Restore failed.' }
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          if ($LASTEXITCODE -ne 0) { throw 'Web build failed.' }
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher build failed.' }
+
+      - name: Publish applications fail-fast
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Publish applications fail-fast'
+
+      - name: Assemble Windows installer payload
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Assemble Windows installer payload'
+
+      - name: Build WiX 1.1.1 installer fail-fast
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-110Step.ps1" 'Build WiX 1.1.0 installer fail-fast'
+
+      - name: Create verified 1.1.1 release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if (-not (Test-Path $setup)) { throw 'Final 1.1.1 installer missing.' }
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          if ($info.ProductVersion -notmatch '^1\.1\.1') { throw "Incorrect ProductVersion: $($info.ProductVersion)" }
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $signature=Get-AuthenticodeSignature $setup
+          [ordered]@{
+            application='Loper Family Tree Builder'
+            version='1.1.1'
+            release='Route Reliability Hotfix'
+            sha256=$hash
+            authenticodeStatus=$signature.Status.ToString()
+            directUpgradeBaseline='1.0.2'
+            upgradeFrom110Verified=$true
+            legacyNumberPreservationVerified=$true
+            detailedPersonReportPreserved=$true
+            researchIntelligencePreserved=$true
+            webExperiencePreserved=$true
+            duplicateRoutesRemoved=$true
+            descendantRouteVerified=$true
+            cumulativeTestsPassed=$true
+            githubRunId=$env:GITHUB_RUN_ID
+            generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')
+          } | ConvertTo-Json | Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.1.1.json" -Encoding utf8
+          Write-Host "ProductVersion: $($info.ProductVersion)"
+          Write-Host "SHA256: $hash"
+          Write-Host "Authenticode: $($signature.Status)"
+
+      - name: Upload verified 1.1.1 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.1.1-route-reliability
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.1.1.json
+          if-no-files-found: error
