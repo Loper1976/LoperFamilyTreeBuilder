@@ -1,0 +1,33 @@
+name: Build final cumulative 1.1.7
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.7-archive-tree-profiles ]
+    paths:
+      - '.github/workflows/build-1.1.7-final.yml'
+      - 'bootstrap/1.1.7/build-1.1.7-final.ps1'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build and verify cumulative 1.1.7
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.7\build-1.1.7-final.ps1"
+      - name: Upload verified 1.1.7 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.1.7-archive-tree-public-profiles
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.1.7.json
+          if-no-files-found: error
