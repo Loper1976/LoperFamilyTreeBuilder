@@ -57,7 +57,7 @@ jobs:
       - name: Apply modern UI reliability 1.1.4
         shell: pwsh
         run: |
-          $rel=@('overlay.part00.b64','overlay.part01a.b64','overlay.part01b.b64','overlay.part01c.b64','overlay.part01d.b64','overlay.part02.b64','overlay.part03.b64','overlay.part04.b64','overlay.part05a.b64','overlay.part05b.b64','overlay.part05c.b64','overlay.part05d.b64','overlay.part06a.b64','overlay.part06b.b64','overlay.part06c.b64','overlay.part06d.b64','overlay.part07a.b64','overlay.part07b1.b64','overlay.part07b2.b64','overlay.part07b3.b64','overlay.part07b4.b64','overlay.part07b5.b64','overlay.part07c.b64')
+          $rel=@('overlay.part00.b64','overlay.part01a.b64','overlay.part01b.b64','overlay.part01c.b64','overlay.part01d.b64','overlay.part02.b64','overlay.part03.b64','overlay.part04.b64','overlay.part05a.b64','overlay.part05b.b64','overlay.part05c.b64','overlay.part05d.b64','overlay.part06a.b64','overlay.part06b.b64','overlay.part06c.b64','overlay.part06d.b64','overlay.part07a1.b64','overlay.part07a2.b64','overlay.part07a3.b64','overlay.part07a4.b64','overlay.part07a5.b64','overlay.part07b1.b64','overlay.part07b2.b64','overlay.part07b3.b64','overlay.part07b4.b64','overlay.part07b5.b64','overlay.part07c.b64')
           $parts=$rel|ForEach-Object{Join-Path $env:GITHUB_WORKSPACE "bootstrap/1.1.4/$_"}
           foreach($p in $parts){if(-not(Test-Path $p)){throw "Missing overlay part: $p"}}
           $encoded=($parts|ForEach-Object{(Get-Content $_ -Raw).Trim()})-join''
