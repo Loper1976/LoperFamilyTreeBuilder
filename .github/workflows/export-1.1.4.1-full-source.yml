@@ -1,0 +1,70 @@
+name: Export 1.1.4.1 full reconstructed source
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.7-archive-tree-profiles ]
+    paths:
+      - '.github/workflows/export-1.1.4.1-full-source.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create 1.1.4.1 step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+          if(-not(Test-Path $workflow)){throw "1.1.4.1 workflow missing: $workflow"}
+          $lines=Get-Content $workflow
+          $step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "1.1.4.1 step not found: $Name"}
+          $run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"}
+          $block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){
+            if($lines[$i]-match '^      - '){break}
+            $line=$lines[$i]
+            if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()}
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block-join "`n")))
+          if(-not $?){throw "1.1.4.1 step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" -Encoding utf8
+
+      - name: Reconstruct cumulative 1.1.4.1
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" 'Create 1.1.4 reconstruction runner'
+          & "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" 'Reconstruct cumulative 1.1.3'
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "Reconstructed source root missing: $env:SOURCE_ROOT"}
+          "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" 'Apply verified 1.1.4 base'
+          & "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" 'Apply 1.1.4.1 UI reliability hotfix'
+          & "$env:GITHUB_WORKSPACE\Invoke-1141Step.ps1" 'Verify 1.1.4.1 contract'
+
+      - name: Remove build output
+        shell: pwsh
+        run: |
+          Get-ChildItem $env:SOURCE_ROOT -Directory -Recurse | Where-Object { $_.Name -in @('bin','obj') } | Sort-Object FullName -Descending | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.1.4.1-full-source
+          path: source/LoperFamilyTreeBuilder_InstallerFirst_Phase3/**
+          if-no-files-found: error
