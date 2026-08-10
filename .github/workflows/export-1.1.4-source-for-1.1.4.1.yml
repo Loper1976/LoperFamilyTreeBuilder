@@ -45,15 +45,32 @@ jobs:
           if(-not $?){throw "1.1.4 step failed: $Name"}
           '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" -Encoding utf8
 
-      - name: Reconstruct cumulative 1.1.4
+      - name: Reconstruct cumulative 1.1.3
         shell: pwsh
         run: |
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Create 1.1.3 step runner'
           & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Reconstruct cumulative 1.1.3'
           $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "Reconstructed source root missing: $env:SOURCE_ROOT"}
           "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Apply modern UI reliability 1.1.4'
-          & "$env:GITHUB_WORKSPACE\Invoke-114Step.ps1" 'Verify cumulative 1.1.4 contract'
+
+      - name: Apply verified 1.1.4 overlay
+        shell: pwsh
+        run: |
+          $rel=@('overlay.part00.b64','overlay.part01a.b64','overlay.part01b.b64','overlay.part01c.b64','overlay.part01d.b64','overlay.part02.b64','overlay.part03.b64','overlay.part04.b64','overlay.part05a.b64','overlay.part05b.b64','overlay.part05c.b64','overlay.part05d.b64','overlay.part06a.b64','overlay.part06b.b64','overlay.part06c.b64','overlay.part06d.b64','overlay.part07a1.b64','overlay.part07a2.b64','overlay.part07a3.b64','overlay.part07a4.b64','overlay.part07a5.b64','overlay.part07b1.b64','overlay.part07b2.b64','overlay.part07b3.b64','overlay.part07b4.b64','overlay.part07b5.b64','overlay.part07c.b64')
+          $parts=$rel|ForEach-Object{Join-Path $env:GITHUB_WORKSPACE "bootstrap/1.1.4/$_"}
+          foreach($p in $parts){if(-not(Test-Path $p)){throw "Missing 1.1.4 overlay part: $p"}}
+          $encoded=($parts|ForEach-Object{(Get-Content $_ -Raw).Trim()})-join''
+          if($encoded.Length-ne153592){throw "1.1.4 overlay base64 length mismatch: $($encoded.Length)"}
+          $zip=Join-Path $env:RUNNER_TEMP 'LoperFamilyTreeBuilder-1.1.4-overlay.zip'
+          [IO.File]::WriteAllBytes($zip,[Convert]::FromBase64String($encoded))
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($hash-ne'7393ec9b98fccea5f6b4144ef0754ad691b23a75485116277a26c78a12ab5843'){throw "1.1.4 overlay hash mismatch: $hash"}
+          Expand-Archive $zip -DestinationPath $env:SOURCE_ROOT -Force
+          $launcher=Join-Path $env:SOURCE_ROOT 'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs'
+          $text=Get-Content $launcher -Raw
+          $text=$text.Replace('TargetVersion = "1.1.3"','TargetVersion = "1.1.4"')
+          Set-Content $launcher $text -Encoding utf8
 
       - name: Upload selected 1.1.4 source
         uses: actions/upload-artifact@v4
