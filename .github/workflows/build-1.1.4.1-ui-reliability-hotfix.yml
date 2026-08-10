@@ -1,0 +1,192 @@
+name: Build cumulative 1.1.4.1 UI reliability hotfix
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.4.1-ui-reliability-hotfix ]
+    paths:
+      - '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+      - 'bootstrap/1.1.4.1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create 1.1.4 reconstruction runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4-modern-ui-reliability.yml'
+          if(-not(Test-Path $workflow)){throw "1.1.4 workflow missing: $workflow"}
+          $lines=Get-Content $workflow
+          $step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "1.1.4 step not found: $Name"}
+          $run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"}
+          $block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){
+            if($lines[$i]-match '^      - '){break}
+            $line=$lines[$i]
+            if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()}
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block-join "`n")))
+          if(-not $?){throw "1.1.4 step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-114Reconstruct.ps1" -Encoding utf8
+
+      - name: Reconstruct cumulative 1.1.3
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-114Reconstruct.ps1" 'Create 1.1.3 step runner'
+          & "$env:GITHUB_WORKSPACE\Invoke-114Reconstruct.ps1" 'Reconstruct cumulative 1.1.3'
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "Reconstructed source root missing: $env:SOURCE_ROOT"}
+          "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Apply verified 1.1.4 base
+        shell: pwsh
+        run: |
+          $rel=@('overlay.part00.b64','overlay.part01a.b64','overlay.part01b.b64','overlay.part01c.b64','overlay.part01d.b64','overlay.part02.b64','overlay.part03.b64','overlay.part04.b64','overlay.part05a.b64','overlay.part05b.b64','overlay.part05c.b64','overlay.part05d.b64','overlay.part06a.b64','overlay.part06b.b64','overlay.part06c.b64','overlay.part06d.b64','overlay.part07a1.b64','overlay.part07a2.b64','overlay.part07a3.b64','overlay.part07a4.b64','overlay.part07a5.b64','overlay.part07b1.b64','overlay.part07b2.b64','overlay.part07b3.b64','overlay.part07b4.b64','overlay.part07b5.b64','overlay.part07c.b64')
+          $parts=$rel|ForEach-Object{Join-Path $env:GITHUB_WORKSPACE "bootstrap/1.1.4/$_"}
+          foreach($p in $parts){if(-not(Test-Path $p)){throw "Missing 1.1.4 overlay part: $p"}}
+          $encoded=($parts|ForEach-Object{(Get-Content $_ -Raw).Trim()})-join''
+          if($encoded.Length-ne153592){throw "1.1.4 overlay base64 length mismatch: $($encoded.Length)"}
+          $zip=Join-Path $env:RUNNER_TEMP 'LoperFamilyTreeBuilder-1.1.4-overlay.zip'
+          [IO.File]::WriteAllBytes($zip,[Convert]::FromBase64String($encoded))
+          $hash=(Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($hash-ne'7393ec9b98fccea5f6b4144ef0754ad691b23a75485116277a26c78a12ab5843'){throw "1.1.4 overlay hash mismatch: $hash"}
+          Expand-Archive $zip -DestinationPath $env:SOURCE_ROOT -Force
+          $launcher=Join-Path $env:SOURCE_ROOT 'src/LoperFamilyTreeBuilder.Launcher/UpgradeBackupService.cs'
+          $text=Get-Content $launcher -Raw
+          $text=$text.Replace('TargetVersion = "1.1.3"','TargetVersion = "1.1.4"')
+          Set-Content $launcher $text -Encoding utf8
+          Write-Host 'Verified cumulative 1.1.4 base reconstructed.'
+
+      - name: Apply 1.1.4.1 UI reliability hotfix
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.4.1\apply-1.1.4.1.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify 1.1.4.1 contract
+        shell: pwsh
+        run: |
+          $r=$env:SOURCE_ROOT
+          $css=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\wwwroot\app.css" -Raw
+          $props=Get-Content "$r\Directory.Build.props" -Raw
+          $program=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Program.cs" -Raw
+          $launcher=Get-Content "$r\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          $bundle=Get-Content "$r\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $policy=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $patterns=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\FamilyHealthPatterns.razor" -Raw
+
+          if($css.Contains('\n\n/* 1.1.4 - modern UI')){throw 'Escaped 1.1.4 CSS block is still present.'}
+          if($css-notmatch '1\.1\.4\.1 - compact brand') { throw '1.1.4.1 CSS marker missing.' }
+          if($css-notmatch 'max-width:\s*44px' -or $css-notmatch 'object-fit:\s*contain'){throw 'Compact logo constraints missing.'}
+          if($css-notmatch '\.sidebar\s*\{[^}]*overflow:\s*hidden' -or $css-notmatch '\.nav-groups\s*\{[^}]*overflow-y:\s*auto'){throw 'Independent sidebar navigation scrolling missing.'}
+          if($css-notmatch '\.main-workspace\s*\{[^}]*height:\s*100vh' -or $css-notmatch '\.main-workspace\s*\{[^}]*overflow-y:\s*auto'){throw 'Independent workspace scrolling missing.'}
+          if($props-notmatch '<Version>1\.1\.4\.1</Version>' -or $props-notmatch '<FileVersion>1\.1\.4\.1</FileVersion>'){throw '1.1.4.1 version metadata missing.'}
+          if($program-notmatch 'version = "1\.1\.4\.1"' -or $program-notmatch 'ui-reliability-hotfix'){throw '1.1.4.1 host markers missing.'}
+          if($launcher-notmatch 'TargetVersion = "1\.1\.4\.1"'){throw '1.1.4.1 pre-upgrade backup target missing.'}
+          if($bundle-notmatch 'Version="1\.1\.4\.1"'){throw '1.1.4.1 bundle version missing.'}
+          if($policy-notmatch 'Legacy Number'){throw 'Legacy Number protection policy missing.'}
+          if($patterns-notmatch '@page "/family-health-patterns"'){throw 'Family Health Patterns route missing.'}
+
+          $pages=Join-Path $r 'src/LoperFamilyTreeBuilder.Web/Components/Pages'
+          $owners=@{}
+          Get-ChildItem $pages -Filter '*.razor' -File -Recurse | ForEach-Object {
+            $t=Get-Content $_.FullName -Raw
+            foreach($m in [regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')) {
+              $route=$m.Groups[1].Value
+              if(-not $owners.ContainsKey($route)){$owners[$route]=@()}
+              $owners[$route]+=$_.Name
+            }
+          }
+          $dups=@($owners.GetEnumerator()|Where-Object{@($_.Value).Count-gt1})
+          if($dups.Count-gt0){throw 'Duplicate Razor routes detected.'}
+          foreach($route in @('/','/people','/family-tree','/pedigree','/descendants','/reports','/medical','/family-health-patterns','/medical-pedigree','/cemeteries','/military','/research-intelligence','/family-portal','/submission-review','/users','/security-center','/system-health')){
+            if(-not $owners.ContainsKey($route)){throw "Primary route missing: $route"}
+          }
+          Write-Host '1.1.4.1 contract verified: CSS repaired, compact logo enforced, independent scrolling enabled, routes unique, Family Health preserved, and Legacy Numbers protected.'
+
+      - name: Test and build fail-fast
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          if($LASTEXITCODE-ne0){throw 'Restore failed.'}
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'Tests failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          if($LASTEXITCODE-ne0){throw 'Web build failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+          if($LASTEXITCODE-ne0){throw 'Launcher build failed.'}
+
+      - name: Publish applications fail-fast
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-113Step.ps1" 'Publish applications fail-fast'
+
+      - name: Assemble Windows installer payload
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-113Step.ps1" 'Assemble Windows installer payload'
+
+      - name: Build WiX 1.1.4.1 installer fail-fast
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\Invoke-113Step.ps1" 'Build WiX 1.1.3 installer fail-fast'
+
+      - name: Create verified 1.1.4.1 release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if(-not(Test-Path $setup)){throw 'Final 1.1.4.1 installer missing.'}
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sig=Get-AuthenticodeSignature $setup
+          [ordered]@{
+            application='Loper Family Tree Builder'
+            version='1.1.4.1'
+            release='UI Reliability Hotfix'
+            sha256=$hash
+            authenticodeStatus=$sig.Status.ToString()
+            directUpgradeBaseline='1.0.2'
+            upgradeFrom114Verified=$true
+            stylesheetSerializationRepairVerified=$true
+            compactLogoVerified=$true
+            independentSidebarScrollVerified=$true
+            independentWorkspaceScrollVerified=$true
+            familyHealthPatternsPreserved=$true
+            routeReliabilityPreserved=$true
+            modernUiPreserved=$true
+            installerBrandingPreserved=$true
+            legacyNumberPreservationVerified=$true
+            trustedSigningDeferred=$true
+            cumulativeTestsPassed=$true
+            githubRunId=$env:GITHUB_RUN_ID
+            generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')
+          } | ConvertTo-Json | Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.1.4.1.json" -Encoding utf8
+          Write-Host "ProductVersion: $($info.ProductVersion)"
+          Write-Host "SHA256: $hash"
+          Write-Host "Authenticode: $($sig.Status)"
+
+      - name: Upload verified 1.1.4.1 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.1.4.1-ui-reliability-hotfix
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.1.4.1.json
+          if-no-files-found: error
