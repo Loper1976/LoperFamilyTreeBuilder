@@ -92,9 +92,16 @@ jobs:
           if($bundle-notmatch'hyperlinkSidebarLicense'-or$bundle-notmatch'LogoFile'-or$bundle-notmatch'LogoSideFile'){throw'Installer branding missing.'}
           foreach($f in @('src/LoperFamilyTreeBuilder.Core/Models/FamilyHealthPatternAnalyzer.cs','src/LoperFamilyTreeBuilder.Web/Components/Pages/Error.razor','build/Sign-Release.ps1','tests/LoperFamilyTreeBuilder.Tests/FamilyHealthPatternAnalyzerTests.cs')){if(-not(Test-Path(Join-Path $r $f))){throw "Required file missing: $f"}}
           $pages=Join-Path $r 'src/LoperFamilyTreeBuilder.Web/Components/Pages';$owners=@{}
-          Get-ChildItem $pages -Filter '*.razor' -File -Recurse|ForEach-Object{$t=Get-Content $_.FullName -Raw;foreach($m in[regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')){$route=$m.Groups[1].Value;if(-not$owners.ContainsKey($route)){$owners[$route]=@()};$owners[$route]+=$_.Name}}
+          Get-ChildItem $pages -Filter '*.razor' -File -Recurse | ForEach-Object {
+            $t=Get-Content $_.FullName -Raw
+            foreach($m in [regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')) {
+              $route=$m.Groups[1].Value
+              if(-not $owners.ContainsKey($route)){$owners[$route]=@()}
+              $owners[$route]+=$_.Name
+            }
+          }
           if(@($owners.GetEnumerator()|Where-Object{@($_.Value).Count-gt1}).Count-gt0){throw'Duplicate Razor routes detected.'}
-          foreach($route in @('/people','/family-tree','/pedigree','/descendants','/reports','/medical','/family-health-patterns','/medical-pedigree','/cemeteries','/military','/research-intelligence','/family-portal','/submission-review','/users','/security-center','/system-health')){if(-not$owners.ContainsKey($route)){throw "Primary route missing: $route"}}
+          foreach($route in @('/people','/family-tree','/pedigree','/descendants','/reports','/medical','/family-health-patterns','/medical-pedigree','/cemeteries','/military','/research-intelligence','/family-portal','/submission-review','/users','/security-center','/system-health')){if(-not $owners.ContainsKey($route)){throw "Primary route missing: $route"}}
           Write-Host '1.1.4 contract verified.'
 
       - name: Test and build fail-fast
