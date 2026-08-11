@@ -1,0 +1,133 @@
+@page "/import-review"
+@page "/import-review/{SessionId:guid}"
+@rendermode InteractiveServer
+@inject GedcomImportService ImportService
+
+<PageTitle>GEDCOM Import Review - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header">
+    <div><div class="page-eyebrow">Import Audit & Approval</div><h1>GEDCOM Import Review</h1><p>Review staged plans, protected-number conflicts, source preservation and post-import quality before applying anything.</p></div>
+    <div class="page-header-actions"><a class="secondary-action inline-link-button" href="/gedcom-import">New Dry Run</a><a class="secondary-action inline-link-button" href="/gedcom-validation">Validation</a></div>
+</div>
+
+@if (_loading) { <section class="page-card loading-card"><div class="loading-indicator"></div><div><strong>Loading import review</strong><span>Reading staged import records.</span></div></section> }
+else if (SessionId is null)
+{
+    <section class="page-card">
+        @if (_sessions.Count == 0) { <div class="empty-state"><h2>No staged imports</h2><p>Run a GEDCOM dry run and create a staging session when you are ready.</p></div> }
+        else
+        {
+            <div class="table-scroll"><table class="people-table"><thead><tr><th>Session</th><th>Created</th><th>File</th><th>Status</th><th>People</th><th>Duplicates</th><th>Conflicts</th><th></th></tr></thead><tbody>
+            @foreach (var session in _sessions)
+            {
+                <tr><td><code>@session.SessionCode</code></td><td>@session.CreatedUtc.ToLocalTime().ToString("g")</td><td>@session.OriginalFileName</td><td>@Format(session.Status)</td><td>@session.IndividualCount.ToString("N0")</td><td>@session.DuplicateCandidateCount.ToString("N0")</td><td>@session.ConflictCount.ToString("N0")</td><td><a href="@($"/import-review/{session.Id}")">Review</a></td></tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+}
+else if (_review is null) { <section class="page-card"><h2>Import not found</h2></section> }
+else
+{
+    <section class="page-card gedcom-review-header-card">
+        <div class="section-heading-row"><div><div class="page-eyebrow">@_review.Session.SessionCode</div><h2>@_review.Session.OriginalFileName</h2><p>Status: <strong>@Format(_review.Session.Status)</strong></p></div></div>
+        <div class="summary-grid gedcom-summary-grid">
+            <div class="summary-card"><div class="summary-value">@_review.Session.IndividualCount.ToString("N0")</div><div class="summary-label">Individuals</div></div>
+            <div class="summary-card"><div class="summary-value">@_review.Session.FamilyCount.ToString("N0")</div><div class="summary-label">Families</div></div>
+            <div class="summary-card"><div class="summary-value">@_review.Session.SourceCount.ToString("N0")</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_review.Session.DuplicateCandidateCount.ToString("N0")</div><div class="summary-label">Duplicates</div></div>
+            <div class="summary-card @(LegacyConflictCount > 0 ? "summary-card-warning" : "")"><div class="summary-value">@LegacyConflictCount.ToString("N0")</div><div class="summary-label">Legacy # Conflicts</div></div>
+            <div class="summary-card"><div class="summary-value">@_review.Session.UnsupportedTagCount.ToString("N0")</div><div class="summary-label">Custom Tags</div></div>
+        </div>
+        @if (LegacyConflictCount > 0) { <div class="alert alert-warning"><strong>Protected Legacy Number conflicts detected.</strong> The existing historical values will not be changed. Conflicted records are excluded from automatic creation and their dependent family links are blocked until reviewed.</div> }
+        @if (!string.IsNullOrWhiteSpace(_message)) { <div class="alert alert-warning">@_message</div> }
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+        <div class="form-actions">
+            <a class="secondary-action" href="/import-review">Back to Imports</a>
+            @if (_review.Session.Status == GedcomImportStatus.Preview) { <button class="primary-action" disabled="@_busy" @onclick="ApproveAsync">Approve Safe Records</button> }
+            @if (_review.Session.Status == GedcomImportStatus.Approved) { <button class="primary-action" disabled="@_busy" @onclick="ApplyAsync">Create Backup &amp; Apply</button> }
+            @if (_review.Session.Status == GedcomImportStatus.Applied && !_confirmRollback) { <button class="danger-action" disabled="@_busy" @onclick="() => _confirmRollback = true">Roll Back This Import</button> }
+            @if (_review.Session.Status == GedcomImportStatus.Applied && _confirmRollback) { <button class="secondary-action" @onclick="() => _confirmRollback = false">Cancel Rollback</button><button class="danger-action" disabled="@_busy" @onclick="RollbackAsync">Confirm Controlled Rollback</button> }
+        </div>
+    </section>
+
+    <section class="page-card" style="margin-top:16px">
+        <div class="section-heading-row"><div><h2>Post-import data quality preview</h2><p>These are research gaps, not automatic corrections.</p></div></div>
+        <div class="gedcom-quality-grid">
+            <div><strong>@_review.Quality.MissingBirthDateCount.ToString("N0")</strong><span>Missing exact birth dates</span></div>
+            <div><strong>@_review.Quality.MissingDeathDateCount.ToString("N0")</strong><span>Missing exact death dates</span></div>
+            <div><strong>@_review.Quality.MissingParentLinkCount.ToString("N0")</strong><span>No parent-family link</span></div>
+            <div><strong>@_review.Quality.MissingSourceCount.ToString("N0")</strong><span>No source reference</span></div>
+            <div><strong>@_review.Quality.NoteCount.ToString("N0")</strong><span>GEDCOM notes preserved</span></div>
+            <div><strong>@_review.Quality.PlaceVariantGroupCount.ToString("N0")</strong><span>Possible place variants</span></div>
+        </div>
+    </section>
+
+    <section class="page-card" style="margin-top:16px">
+        <div class="section-heading-row"><div><h2>People plan</h2><p>Matching records are not silently merged. Conflicted Legacy Numbers never overwrite existing values.</p></div></div>
+        <div class="table-scroll"><table class="people-table gedcom-people-plan"><thead><tr><th>GEDCOM ID</th><th>Name</th><th>Legacy Number</th><th>Birth</th><th>Sources</th><th>Notes</th><th>Plan</th><th>Reason</th></tr></thead><tbody>
+        @foreach (var person in _review.PlannedPeople)
+        {
+            <tr class="@(person.HasLegacyNumberConflict ? "legacy-conflict-row" : "")"><td><code>@person.ExternalId</code></td><td>@person.DisplayName</td><td><code>@person.LegacyNumber</code></td><td>@person.BirthDate?.ToString("MM/dd/yyyy")</td><td>@person.SourceReferenceCount</td><td>@person.NoteCount</td><td>@(person.WillCreate ? "Create new" : person.MatchedPersonId.HasValue && !person.HasLegacyNumberConflict ? "Use reviewed existing match" : "Skip / manual review")</td><td>@person.DuplicateReason</td></tr>
+        }
+        </tbody></table></div>
+    </section>
+
+    <section class="page-card" style="margin-top:16px">
+        <div class="section-heading-row"><div><h2>Issues &amp; unsupported data</h2><p>Unsupported/custom tags remain recorded with the staged session so data is not silently discarded.</p></div></div>
+        @if (_review.Issues.Count == 0) { <p>No issues were recorded.</p> }
+        else
+        {
+            <div class="table-scroll"><table class="people-table gedcom-issue-table"><thead><tr><th>Type</th><th>Record</th><th>Message</th><th>Details</th></tr></thead><tbody>
+            @foreach (var issue in _review.Issues)
+            { <tr class="@(issue.IssueType == GedcomImportIssueType.LegacyNumberConflict ? "legacy-conflict-row" : "")"><td>@Format(issue.IssueType)</td><td><code>@issue.RecordPointer</code></td><td>@issue.Message</td><td>@issue.Details</td></tr> }
+            </tbody></table></div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public Guid? SessionId { get; set; }
+    private bool _loading = true; private bool _busy; private bool _confirmRollback;
+    private string _message = string.Empty; private string _error = string.Empty;
+    private IReadOnlyList<GedcomImportSessionListItem> _sessions = []; private GedcomImportReviewModel? _review;
+    private int LegacyConflictCount => _review?.Issues.Count(x => x.IssueType == GedcomImportIssueType.LegacyNumberConflict) ?? 0;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true; _message = _error = string.Empty; _confirmRollback = false;
+        try { if (SessionId.HasValue) _review = await ImportService.GetReviewAsync(SessionId.Value); else _sessions = await ImportService.GetSessionsAsync(); }
+        finally { _loading = false; }
+    }
+
+    private async Task ApproveAsync()
+    {
+        if (!SessionId.HasValue) return; _busy = true; _error = string.Empty;
+        try { await ImportService.ApproveAsync(SessionId.Value, "Local Application"); _review = await ImportService.GetReviewAsync(SessionId.Value); _message = "Safe-record plan approved. No genealogy data has changed yet."; }
+        catch (Exception ex) { _error = ex.Message; } finally { _busy = false; }
+    }
+
+    private async Task ApplyAsync()
+    {
+        if (!SessionId.HasValue) return; _busy = true; _error = string.Empty;
+        try
+        {
+            var result = await ImportService.ApplyAsync(SessionId.Value, "Local Application"); _review = await ImportService.GetReviewAsync(SessionId.Value);
+            _message = $"Import applied after backup. Created {result.PeopleCreated} people, {result.ParentChildRelationshipsCreated} parent-child links, {result.CoupleRelationshipsCreated} spouse links, {result.SourcesCreated} sources and {result.CitationsCreated} citations. Preserved {result.NotesPreserved} notes. Skipped {result.SkippedDuplicates} duplicate/conflict records. Backup: {result.BackupFilePath}";
+        }
+        catch (Exception ex) { _error = ex.Message; } finally { _busy = false; }
+    }
+
+    private async Task RollbackAsync()
+    {
+        if (!SessionId.HasValue) return; _busy = true; _error = string.Empty;
+        try
+        {
+            var result = await ImportService.RollbackAsync(SessionId.Value, "Local Application"); _review = await ImportService.GetReviewAsync(SessionId.Value); _confirmRollback = false;
+            _message = $"Controlled rollback completed. Removed {result.PeopleRemoved} people, {result.ParentChildRelationshipsRemoved + result.CoupleRelationshipsRemoved} relationships, {result.CitationsRemoved} citations, {result.NotesRemoved} preserved notes and {result.SourcesRemoved} import-only sources. The pre-import backup remains retained.";
+        }
+        catch (Exception ex) { _error = ex.Message; } finally { _busy = false; }
+    }
+
+    private static string Format(Enum value) => string.Concat(value.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
+}
