@@ -1,0 +1,53 @@
+@page "/family-portal"
+@rendermode InteractiveServer
+@attribute [Authorize]
+
+<PageTitle>My Family Portal - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header portal-page-header">
+    <div>
+        <div class="page-eyebrow">Family Collaboration</div>
+        <h1>My Family Portal</h1>
+        <p>Share photographs, documents, memories and corrections for review without changing approved genealogy directly.</p>
+    </div>
+    <div class="page-header-actions">
+        <a class="secondary-action inline-link-button" href="/my-submissions">My Submissions</a>
+        <a class="primary-action inline-link-button" href="/family-submit">Start a Contribution</a>
+    </div>
+</div>
+
+<section class="page-card portal-action-section">
+    <div class="section-heading-row">
+        <div>
+            <h2>Contribute to the Family Archive</h2>
+            <p>Choose the kind of information you want to contribute. Each item enters the private review queue.</p>
+        </div>
+    </div>
+
+    <div class="portal-action-grid">
+        <a class="portal-action-card" href="/family-submit?type=Photo"><span class="portal-action-kicker">MEDIA</span><strong>Add a Photograph</strong><small>Family photographs, headstones, military images and events.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=Document"><span class="portal-action-kicker">RECORD</span><strong>Add a Document</strong><small>Certificates, letters, military records, newspaper items and scans.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=Story"><span class="portal-action-kicker">MEMORY</span><strong>Tell a Story</strong><small>Preserve family memories, traditions and firsthand recollections.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=Correction"><span class="portal-action-kicker">REVIEW</span><strong>Suggest a Correction</strong><small>Propose a change and attach evidence without editing the approved record.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=NewPerson"><span class="portal-action-kicker">PERSON</span><strong>Missing Person</strong><small>Suggest a family member who is not yet represented in the archive.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=Relationship"><span class="portal-action-kicker">FAMILY</span><strong>Relationship</strong><small>Suggest parents, spouses, children or other family connections.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=CemeteryInformation"><span class="portal-action-kicker">BURIAL</span><strong>Cemetery Information</strong><small>Add cemetery, grave, plot, monument or burial details.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=MilitaryInformation"><span class="portal-action-kicker">SERVICE</span><strong>Military Information</strong><small>Add service branches, units, ships, awards and military history.</small></a>
+        <a class="portal-action-card" href="/family-submit?type=SourceCitation"><span class="portal-action-kicker">EVIDENCE</span><strong>Source or Citation</strong><small>Provide records, repositories and citations supporting family history.</small></a>
+    </div>
+</section>
+
+<section class="page-card portal-review-section">
+    <div class="section-heading-row"><div><h2>How review works</h2><p>Contributions are preserved first, reviewed second, and only then connected to approved archive records.</p></div></div>
+    <div class="portal-review-grid">
+        <div class="portal-review-step"><span>1</span><div><strong>Submit privately</strong><small>Your contribution enters a private review queue.</small></div></div>
+        <div class="portal-review-step"><span>2</span><div><strong>Preserve the original</strong><small>Uploaded files retain the original plus SHA-256 integrity information and available metadata.</small></div></div>
+        <div class="portal-review-step"><span>3</span><div><strong>Reviewer decision</strong><small>A reviewer can approve, reject, defer or request clarification.</small></div></div>
+        <div class="portal-review-step"><span>4</span><div><strong>Archive with evidence</strong><small>Approval archives the contribution but does not silently change genealogy facts.</small></div></div>
+    </div>
+</section>
+
+<section class="legacy-protection-panel portal-protection-panel">
+    <div><span>Historical protection</span><strong>Legacy Numbers remain immutable</strong></div>
+    <div>Robert J. Loper Legacy Numbers are reference-only in the contribution portal. Contributors and AI proposals cannot alter, renumber, normalize or replace them.</div>
+</section>
