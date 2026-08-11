@@ -1,0 +1,64 @@
+@page "/documents"
+@rendermode InteractiveServer
+@inject ArchiveLibraryService Archive
+
+<PageTitle>Family Document Archive - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header archive-specialized-header document-specialized-header">
+    <div>
+        <div class="page-eyebrow">Evidence, Records &amp; Transcriptions</div>
+        <h1>Family Document Archive</h1>
+        <p>Review certificates, letters, military records, newspapers, PDFs and other evidence with searchable OCR or transcription text.</p>
+    </div>
+    <div class="page-header-actions">
+        <a class="secondary-action inline-link-button" href="/archive">All Archive Items</a>
+        <a class="secondary-action inline-link-button" href="/archive/collections">Collections</a>
+        <a class="secondary-action inline-link-button" href="/archive/review">Document Review</a>
+        <a class="primary-action inline-link-button" href="/archive/import">Import Documents</a>
+    </div>
+</div>
+
+<section class="page-card specialized-archive-toolbar document-toolbar">
+    <div class="specialized-search-row">
+        <div class="filter-field grow-field"><label>Search documents and OCR/transcription text</label><input @bind="_request.Query" @bind:event="oninput" placeholder="Title, person, Legacy Number, record type, source, OCR text or filename" /></div>
+        <button class="primary-action" @onclick="SearchAsync">Search</button>
+        <button class="secondary-action" @onclick="ClearAsync">Clear</button>
+    </div>
+    <div class="specialized-filter-row">
+        <div class="filter-field"><label>Searchable text</label><select @bind="_text"><option value="">Any</option><option value="yes">Has OCR/transcription</option><option value="no">No OCR/transcription</option></select></div>
+        <div class="filter-field"><label>Review status</label><select @bind="_review"><option value="">All statuses</option>@foreach(var value in Enum.GetValues<ArchiveReviewStatus>()){<option value="@value.ToString()">@Format(value)</option>}</select></div>
+        <div class="specialized-filter-note"><strong>Document workspace</strong><span>Record-first browsing with evidence type, OCR/transcription status, provenance and linked people.</span></div>
+    </div>
+</section>
+
+@if(_loading){<section class="page-card loading-card"><div class="loading-indicator"></div><div><strong>Loading documents</strong><span>Reading document metadata and searchable text indicators.</span></div></section>}
+else if(!string.IsNullOrWhiteSpace(_error)){<section class="page-card error-state-card"><div class="error-state-icon">!</div><div><h2>Documents could not be loaded</h2><p>@_error</p><button class="secondary-action" @onclick="SearchAsync">Try Again</button></div></section>}
+else if(_result is not null)
+{
+    <div class="archive-result-summary"><strong>@_result.TotalCount.ToString("N0")</strong> document(s) · page @_result.Page of @_result.TotalPages</div>
+    @if(_result.Items.Count==0){<section class="page-card empty-state"><h2>No matching documents</h2><p>Import records or broaden the current filters.</p></section>}
+    else
+    {
+        <section class="page-card archive-document-list-card">
+            <div class="archive-document-table-wrap"><table class="archive-document-table"><thead><tr><th>Document</th><th>Record type</th><th>Date / place</th><th>People</th><th>Text</th><th>Review</th></tr></thead><tbody>
+            @foreach(var item in _result.Items){<tr><td><div class="document-title-cell"><span class="document-file-badge">@FileBadge(item)</span><div><a href="@($"/archive/item/{item.MediaFileId}")"><strong>@Title(item)</strong></a><small>@item.OriginalFileName · @FormatBytes(item.FileSizeBytes)</small>@if(!string.IsNullOrWhiteSpace(item.Provenance)){<small>Provenance: @item.Provenance</small>}</div></div></td><td>@(!string.IsNullOrWhiteSpace(item.DocumentType)?item.DocumentType:"Unclassified")</td><td>@DatePlace(item)</td><td>@(item.LinkedPeopleCount==0?"Unlinked":$"{item.LinkedPeopleCount} linked")</td><td>@(item.HasTranscription?(item.TranscriptionApproved?"Approved text":"Text available"):"Not indexed")</td><td><span class="document-review-pill">@Format(item.ReviewStatus)</span></td></tr>}
+            </tbody></table></div>
+        </section>
+        <div class="pagination-bar"><button class="secondary-action" disabled="@(!_result.HasPreviousPage)" @onclick="PreviousAsync">Previous</button><span>Page @_result.Page of @_result.TotalPages</span><button class="secondary-action" disabled="@(!_result.HasNextPage)" @onclick="NextAsync">Next</button></div>
+    }
+}
+
+@code {
+    private ArchiveLibrarySearchRequest _request=new(){MediaType=ArchiveMediaType.Document,PageSize=50};
+    private PagedResult<ArchiveLibraryItem>? _result; private bool _loading; private string _error=string.Empty; private string _text=string.Empty; private string _review=string.Empty;
+    protected override async Task OnInitializedAsync()=>await SearchAsync();
+    private async Task SearchAsync(){_loading=true;_error=string.Empty;try{_request.MediaType=ArchiveMediaType.Document;_request.HasTranscription=_text=="yes"?true:_text=="no"?false:null;_request.ReviewStatus=Enum.TryParse<ArchiveReviewStatus>(_review,out var r)?r:null;_result=await Archive.SearchAsync(_request);}catch(Exception ex){_error=ex.Message;}finally{_loading=false;}}
+    private async Task ClearAsync(){_request=new(){MediaType=ArchiveMediaType.Document,PageSize=50};_text=_review=string.Empty;await SearchAsync();}
+    private async Task PreviousAsync(){if(_result?.HasPreviousPage==true){_request.Page--;await SearchAsync();}}
+    private async Task NextAsync(){if(_result?.HasNextPage==true){_request.Page++;await SearchAsync();}}
+    private static string Title(ArchiveLibraryItem i)=>!string.IsNullOrWhiteSpace(i.Title)?i.Title:i.OriginalFileName;
+    private static string FileBadge(ArchiveLibraryItem i){var extension=Path.GetExtension(i.OriginalFileName).TrimStart('.').ToUpperInvariant();return i.MimeType.Contains("pdf",StringComparison.OrdinalIgnoreCase)?"PDF":string.IsNullOrWhiteSpace(extension)?"DOC":extension;}
+    private static string DatePlace(ArchiveLibraryItem i){var parts=new[]{i.CaptureDateTime?.ToString("yyyy-MM-dd"),i.ApproximateDateText,i.PlaceName}.Where(x=>!string.IsNullOrWhiteSpace(x));var s=string.Join(" · ",parts);return string.IsNullOrWhiteSpace(s)?"Not identified":s;}
+    private static string FormatBytes(long v)=>v>=1024*1024?$"{v/(1024d*1024d):N1} MB":$"{Math.Max(v/1024d,0):N1} KB";
+    private static string Format(Enum value)=>string.Concat(value.ToString().Select((c,i)=>i>0&&char.IsUpper(c)?" "+c:c.ToString()));
+}
