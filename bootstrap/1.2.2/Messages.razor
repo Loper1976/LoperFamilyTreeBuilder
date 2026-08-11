@@ -1,0 +1,224 @@
+@page "/messages"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject FamilyMessagingService Messaging
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Family Messages - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header hud-page-header">
+    <div>
+        <div class="page-eyebrow">Secure Family Communications</div>
+        <h1>Family Messages</h1>
+        <p>Private member-to-member conversations. Messages move to the retrievable archive after 120 days.</p>
+    </div>
+    <div class="page-header-actions">
+        <span class="hud-status-chip"><i></i> PRIVATE CHANNEL</span>
+        <button class="primary-action" @onclick="OpenCompose">New Message</button>
+    </div>
+</div>
+
+@if(!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<section class="message-console page-card">
+    <aside class="message-sidebar">
+        <div class="message-mailbox-tabs">
+            <button class="@MailboxClass(FamilyMessageMailbox.Inbox)" @onclick="()=>SetMailboxAsync(FamilyMessageMailbox.Inbox)">Inbox <span>@_unreadCount</span></button>
+            <button class="@MailboxClass(FamilyMessageMailbox.Sent)" @onclick="()=>SetMailboxAsync(FamilyMessageMailbox.Sent)">Sent</button>
+            <button class="@MailboxClass(FamilyMessageMailbox.Archived)" @onclick="()=>SetMailboxAsync(FamilyMessageMailbox.Archived)">Archived</button>
+        </div>
+        <div class="message-search-row">
+            <input @bind="_search" @bind:event="oninput" placeholder="Search messages" />
+            <button class="secondary-action compact-action" @onclick="LoadMailboxAsync">Search</button>
+        </div>
+        <div class="conversation-list">
+            @if(_loading)
+            {
+                <div class="message-empty">Loading secure channel…</div>
+            }
+            else if(_conversations.Count == 0)
+            {
+                <div class="message-empty">No messages in this view.</div>
+            }
+            else
+            {
+                @foreach(var item in _conversations)
+                {
+                    <button class="conversation-card @(_selectedOtherId == item.OtherUserId ? "selected" : "")" @onclick="()=>SelectConversationAsync(item.OtherUserId)">
+                        <div class="conversation-card-head"><strong>@item.OtherDisplayName</strong><time>@FormatAge(item.LastMessageUtc)</time></div>
+                        <div class="conversation-subject">@item.Subject</div>
+                        <div class="conversation-preview">@item.Preview</div>
+                        @if(item.UnreadCount > 0){<span class="unread-badge">@item.UnreadCount NEW</span>}
+                        @if(item.ArchivedOnly){<span class="archive-badge">ARCHIVED</span>}
+                    </button>
+                }
+            }
+        </div>
+    </aside>
+
+    <div class="message-workspace">
+        @if(_composeOpen)
+        {
+            <section class="message-compose-panel">
+                <div class="message-panel-title"><div><span>COMPOSE CHANNEL</span><strong>New private message</strong></div><button class="topbar-link" @onclick="CloseCompose">Close</button></div>
+                <div class="message-compose-grid">
+                    <label>Recipient<select @bind="_composeRecipient"><option value="">Select a member</option>@foreach(var member in _recipients){<option value="@member.UserId">@member.DisplayName (@member.Email)</option>}</select></label>
+                    <label>Subject<input @bind="_composeSubject" maxlength="500" placeholder="Family message" /></label>
+                    <label class="message-body-field">Message<textarea @bind="_composeBody" rows="9" placeholder="Write a private message…"></textarea></label>
+                </div>
+                <div class="message-compose-footer"><span>Message content is private to the sender and recipient. Automatic archive: 120 days.</span><button class="primary-action" @onclick="SendNewAsync" disabled="@_sending">@(_sending ? "Sending…" : "Send Message")</button></div>
+            </section>
+        }
+        else if(_selectedOtherId.HasValue)
+        {
+            <section class="message-thread-panel">
+                <header class="message-thread-header">
+                    <div><span>SECURE DIRECT CHANNEL</span><h2>@SelectedName</h2><small>@SelectedEmail</small></div>
+                    <div class="message-thread-security"><span>PRIVATE MEMBER CHANNEL</span><strong>Retrievable archive</strong></div>
+                </header>
+                <div class="message-thread-scroll">
+                    @if(_thread.Count == 0)
+                    {
+                        <div class="message-empty">No messages available in this channel.</div>
+                    }
+                    else
+                    {
+                        @foreach(var message in _thread)
+                        {
+                            <article class="message-bubble @(message.SenderUserId == _currentUserId ? "outgoing" : "incoming") @(message.IsArchived ? "archived" : "")">
+                                <div class="message-bubble-meta"><strong>@(message.SenderUserId == _currentUserId ? "You" : message.SenderName)</strong><time>@message.SentUtc.ToLocalTime().ToString("g")</time></div>
+                                <div class="message-bubble-subject">@message.Subject</div>
+                                <p>@message.Body</p>
+                                <footer>@if(message.IsArchived){<span>Archived @message.ArchivedUtc!.Value.ToLocalTime().ToString("d") · retrievable</span>}else if(message.SenderUserId == _currentUserId && message.ReadUtc.HasValue){<span>Read by recipient</span>}else if(message.RecipientUserId == _currentUserId && message.ReadUtc.HasValue){<span>Read</span>}else{<span>Active record</span>}</footer>
+                            </article>
+                        }
+                    }
+                </div>
+                <div class="message-reply-panel">
+                    <label>Reply<textarea @bind="_replyBody" rows="4" placeholder="Reply to this member…"></textarea></label>
+                    <div><span>Replies create a new active message even when viewing older archived messages.</span><button class="primary-action" @onclick="SendReplyAsync" disabled="@_sending">Send Reply</button></div>
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="message-standby-panel">
+                <div class="hud-orbit-icon">↔</div>
+                <div class="page-eyebrow">Communications Standby</div>
+                <h2>Select a conversation</h2>
+                <p>Choose a member conversation on the left or start a new private message.</p>
+                <div class="message-retention-note"><strong>120-DAY ARCHIVE</strong><span>Messages are never discarded by the automatic archive process. Open Archived to retrieve older communications.</span></div>
+            </section>
+        }
+    </div>
+</section>
+
+@code {
+    private Guid _currentUserId;
+    private FamilyMessageMailbox _mailbox = FamilyMessageMailbox.Inbox;
+    private IReadOnlyList<FamilyConversationSummary> _conversations = [];
+    private IReadOnlyList<FamilyMessageListItem> _thread = [];
+    private IReadOnlyList<FamilyMessageMember> _recipients = [];
+    private Guid? _selectedOtherId;
+    private string _search = string.Empty;
+    private int _unreadCount;
+    private bool _loading;
+    private bool _sending;
+    private bool _composeOpen;
+    private string _composeRecipient = string.Empty;
+    private string _composeSubject = string.Empty;
+    private string _composeBody = string.Empty;
+    private string _replyBody = string.Empty;
+    private string _error = string.Empty;
+
+    private string SelectedName => _recipients.FirstOrDefault(x => x.UserId == _selectedOtherId)?.DisplayName ?? _conversations.FirstOrDefault(x => x.OtherUserId == _selectedOtherId)?.OtherDisplayName ?? "Family member";
+    private string SelectedEmail => _recipients.FirstOrDefault(x => x.UserId == _selectedOtherId)?.Email ?? _conversations.FirstOrDefault(x => x.OtherUserId == _selectedOtherId)?.OtherEmail ?? string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if(!Guid.TryParse(state.User.FindFirst("family_user_id")?.Value, out _currentUserId))
+            return;
+        _recipients = await Messaging.GetRecipientsAsync(_currentUserId);
+        await LoadMailboxAsync();
+    }
+
+    private async Task SetMailboxAsync(FamilyMessageMailbox mailbox)
+    {
+        _mailbox = mailbox;
+        _composeOpen = false;
+        _selectedOtherId = null;
+        _thread = [];
+        await LoadMailboxAsync();
+    }
+
+    private async Task LoadMailboxAsync()
+    {
+        if(_currentUserId == Guid.Empty) return;
+        _loading = true;
+        _error = string.Empty;
+        try
+        {
+            _conversations = await Messaging.GetConversationsAsync(_currentUserId, _mailbox, _search);
+            _unreadCount = await Messaging.GetUnreadCountAsync(_currentUserId);
+        }
+        catch(Exception ex){_error = ex.Message;}
+        finally{_loading = false;}
+    }
+
+    private async Task SelectConversationAsync(Guid otherUserId)
+    {
+        _composeOpen = false;
+        _selectedOtherId = otherUserId;
+        _thread = await Messaging.GetConversationAsync(_currentUserId, otherUserId, includeArchived: _mailbox == FamilyMessageMailbox.Archived);
+        _unreadCount = await Messaging.GetUnreadCountAsync(_currentUserId);
+        _conversations = await Messaging.GetConversationsAsync(_currentUserId, _mailbox, _search);
+    }
+
+    private void OpenCompose(){_composeOpen = true;_selectedOtherId = null;_thread = [];_error = string.Empty;}
+    private void CloseCompose(){_composeOpen = false;}
+
+    private async Task SendNewAsync()
+    {
+        if(!Guid.TryParse(_composeRecipient, out var recipientId)){_error = "Select a recipient.";return;}
+        if(string.IsNullOrWhiteSpace(_composeBody)){_error = "Enter a message.";return;}
+        _sending = true;_error = string.Empty;
+        try
+        {
+            await Messaging.SendAsync(_currentUserId, new SendFamilyMessageRequest{RecipientUserId=recipientId,Subject=_composeSubject,Body=_composeBody}, "Family member");
+            _composeOpen = false;_composeSubject = _composeBody = string.Empty;_composeRecipient = string.Empty;
+            _mailbox = FamilyMessageMailbox.Sent;
+            await LoadMailboxAsync();
+            await SelectConversationAsync(recipientId);
+        }
+        catch(Exception ex){_error = ex.Message;}
+        finally{_sending = false;}
+    }
+
+    private async Task SendReplyAsync()
+    {
+        if(!_selectedOtherId.HasValue || string.IsNullOrWhiteSpace(_replyBody)) return;
+        _sending = true;_error = string.Empty;
+        try
+        {
+            var subject = _thread.LastOrDefault()?.Subject ?? "Family message";
+            await Messaging.SendAsync(_currentUserId, new SendFamilyMessageRequest{RecipientUserId=_selectedOtherId.Value,Subject=subject,Body=_replyBody}, "Family member");
+            _replyBody = string.Empty;
+            _mailbox = FamilyMessageMailbox.Inbox;
+            await SelectConversationAsync(_selectedOtherId.Value);
+            await LoadMailboxAsync();
+        }
+        catch(Exception ex){_error=ex.Message;}
+        finally{_sending=false;}
+    }
+
+    private string MailboxClass(FamilyMessageMailbox mailbox) => _mailbox == mailbox ? "active" : string.Empty;
+    private static string FormatAge(DateTimeOffset utc)
+    {
+        var local = utc.ToLocalTime();
+        return local.Date == DateTimeOffset.Now.Date ? local.ToString("t") : local.ToString("MMM d");
+    }
+}
