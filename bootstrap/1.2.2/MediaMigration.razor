@@ -1,0 +1,71 @@
+@page "/media-migration"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = "ArchiveAdmin")]
+@inject MediaMigrationService Migration
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Media Migration - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header hud-page-header">
+    <div><div class="page-eyebrow">Archive Intake Console</div><h1>Ancestry / Family Tree Maker Media Migration</h1><p>Analyze an exported media folder first, preserve originals, detect duplicates and review uncertain person matches before linking anything.</p></div>
+    <div class="page-header-actions"><a class="secondary-action inline-link-button" href="/archive">Archive Library</a><a class="secondary-action inline-link-button" href="/archive/review">Review Queue</a></div>
+</div>
+@if(!string.IsNullOrWhiteSpace(_error)){<div class="alert alert-danger">@_error</div>}
+@if(!string.IsNullOrWhiteSpace(_message)){<div class="alert alert-success">@_message</div>}
+
+<section class="page-card migration-intake-card">
+    <div class="section-heading-row"><div><div class="page-eyebrow">Step 1 · Read Only Analysis</div><h2>Select the exported media folder</h2><p>The analysis reads the source folder but does not alter, move or rename the Ancestry/Family Tree Maker originals.</p></div></div>
+    <div class="migration-input-grid">
+        <label>Source type<select @bind="_sourceType">@foreach(var value in Enum.GetValues<MediaMigrationSourceType>()){<option value="@value">@Format(value)</option>}</select></label>
+        <label class="grow-field">Media folder path<input @bind="_sourcePath" placeholder="Example: D:\Family Tree Maker\Loper Media" /></label>
+        <button class="primary-action" @onclick="AnalyzeAsync" disabled="@_busy">@(_busy ? "Analyzing…" : "Analyze Folder")</button>
+    </div>
+    <div class="migration-path-note">Network-drive paths are supported when the Windows account running Family Tree Builder can access them.</div>
+</section>
+
+@if(_analysis is not null)
+{
+    <section class="summary-grid migration-summary-grid">
+        <article class="summary-card"><div class="summary-value">@_analysis.Session.FilesScanned</div><div class="summary-label">Files scanned</div></article>
+        <article class="summary-card"><div class="summary-value">@_analysis.Session.ReadyToImportCount</div><div class="summary-label">Safe originals</div></article>
+        <article class="summary-card"><div class="summary-value">@_analysis.Session.ExactDuplicateCount</div><div class="summary-label">Exact duplicates</div></article>
+        <article class="summary-card"><div class="summary-value">@_analysis.Session.NeedsReviewCount</div><div class="summary-label">Needs review</div></article>
+        <article class="summary-card"><div class="summary-value">@_analysis.Session.ImportedCount</div><div class="summary-label">Imported</div></article>
+    </section>
+    <section class="page-card migration-action-card"><div><div class="page-eyebrow">Step 2 · Controlled Import</div><h2>@_analysis.Session.SessionCode</h2><p>Safe originals are copied into the private archive. Existing exact duplicates are reused, uncertain filename matches remain for review, and Legacy Numbers are reference-only.</p></div><button class="primary-action" @onclick="ImportAsync" disabled="@(_busy || _analysis.Session.ReadyToImportCount == 0)">@(_busy ? "Working…" : "Import Safe Originals")</button></section>
+    <section class="page-card migration-table-card"><div class="section-heading-row"><div><h2>Analysis results</h2><p>Showing up to 1,000 items from this migration session.</p></div></div><div class="table-wrap"><table class="data-table migration-table"><thead><tr><th>File</th><th>Type</th><th>Status</th><th>Person suggestion</th><th>Integrity</th></tr></thead><tbody>
+    @foreach(var item in _analysis.Items)
+    {
+        <tr class="@(item.Status == MediaMigrationItemStatus.NeedsReview || item.Status == MediaMigrationItemStatus.Unsupported || item.Status == MediaMigrationItemStatus.Failed ? "migration-review-row" : "")">
+            <td><strong>@item.OriginalFileName</strong><small>@item.SourceRelativePath</small></td>
+            <td>@Format(item.MediaType)<small>@FormatBytes(item.FileSizeBytes)</small></td>
+            <td><span class="migration-status @item.Status.ToString().ToLowerInvariant()">@Format(item.Status)</span>@if(!string.IsNullOrWhiteSpace(item.ReviewNote)){<small>@item.ReviewNote</small>}</td>
+            <td>@if(item.SuggestedPersonId.HasValue){<strong>@item.SuggestedPersonName</strong>@if(!string.IsNullOrWhiteSpace(item.SuggestedLegacyNumber)){<small>Legacy # @item.SuggestedLegacyNumber</small>}<small>@item.SuggestedMatchReason</small>}else{<span class="muted">Unlinked · review later</span>}</td>
+            <td>@if(item.ExistingMediaFileId.HasValue){<span>Existing original</span>}else if(!string.IsNullOrWhiteSpace(item.Sha256)){<code>@item.Sha256[..Math.Min(12,item.Sha256.Length)]…</code>}else{<span>Not calculated</span>}</td>
+        </tr>
+    }
+    </tbody></table></div></section>
+}
+else if(_sessions.Count > 0)
+{
+    <section class="page-card"><div class="section-heading-row"><div><h2>Recent migration sessions</h2><p>Previous analyses remain available as an audit trail.</p></div></div><div class="migration-session-list">@foreach(var item in _sessions){<button @onclick="()=>OpenSessionAsync(item.SessionId)"><strong>@item.SessionCode</strong><span>@Format(item.SourceType) · @item.FilesScanned files · @Format(item.Status)</span><time>@item.CreatedUtc.ToLocalTime().ToString("g")</time></button>}</div></section>
+}
+
+<section class="legacy-protection-panel"><div><span>Historical protection</span><strong>Legacy Numbers are never changed by media migration</strong></div><div>Filename matching may use a Legacy Number only to suggest or safely link the correct person. It cannot renumber, normalize, replace or recalculate Robert J. Loper's historical numbering.</div></section>
+
+@code {
+    private MediaMigrationSourceType _sourceType = MediaMigrationSourceType.FamilyTreeMaker;
+    private string _sourcePath = string.Empty;
+    private string _actor = "Project owner";
+    private bool _busy;
+    private string _error = string.Empty;
+    private string _message = string.Empty;
+    private MediaMigrationAnalysisResult? _analysis;
+    private IReadOnlyList<MediaMigrationSessionSummary> _sessions = [];
+    protected override async Task OnInitializedAsync(){var state=await AuthenticationStateProvider.GetAuthenticationStateAsync();_actor=state.User.Identity?.Name??"Project owner";_sessions=await Migration.GetSessionsAsync();}
+    private async Task AnalyzeAsync(){_busy=true;_error=_message=string.Empty;try{_analysis=await Migration.AnalyzeFolderAsync(_sourceType,_sourcePath,_actor);_message="Analysis complete. No source files were changed.";}catch(Exception ex){_error=ex.Message;}finally{_busy=false;}}
+    private async Task ImportAsync(){if(_analysis is null)return;_busy=true;_error=_message=string.Empty;try{_analysis=await Migration.ImportSafeOriginalsAsync(_analysis.Session.SessionId,_actor);_message="Safe originals were copied into the private archive. Review items were left unresolved.";}catch(Exception ex){_error=ex.Message;}finally{_busy=false;}}
+    private async Task OpenSessionAsync(Guid id){_analysis=await Migration.GetAnalysisAsync(id);}
+    private static string Format(Enum value)=>string.Concat(value.ToString().Select((c,i)=>i>0&&char.IsUpper(c)?" "+c:c.ToString()));
+    private static string FormatBytes(long value)=>value>=1024L*1024L?$"{value/(1024d*1024d):N1} MB":$"{Math.Max(value/1024d,0):N0} KB";
+}
