@@ -1,0 +1,35 @@
+name: Export reconstructed 1.1.8 source for 1.1.9
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.1.9-archive-detail-enhancements ]
+    paths:
+      - '.github/workflows/export-1.1.8-full-source-for-1.1.9.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Reconstruct verified 1.1.8 source
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.8\build-1.1.8-final.ps1"
+      - name: Remove build output
+        shell: pwsh
+        run: |
+          $r=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          Get-ChildItem $r -Directory -Recurse -Force | Where-Object { $_.Name -in @('bin','obj') } | Sort-Object FullName -Descending | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.1.8-full-source-for-1.1.9
+          path: source/LoperFamilyTreeBuilder_InstallerFirst_Phase3/**
+          if-no-files-found: error
