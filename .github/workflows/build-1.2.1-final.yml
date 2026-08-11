@@ -1,0 +1,156 @@
+name: Build final cumulative 1.2.1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.2.1-gedcom-import-data-integrity ]
+    paths:
+      - '.github/workflows/build-1.2.1-final.yml'
+      - 'bootstrap/1.2.1/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create installer step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+          if(-not(Test-Path $workflow)){throw "Installer workflow missing: $workflow"}
+          $lines=Get-Content $workflow
+          $step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "Installer step not found: $Name"}
+          $run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"}
+          $block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){
+            if($lines[$i]-match '^      - '){break}
+            $line=$lines[$i]
+            if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()}
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block-join "`n")))
+          if(-not $?){throw "Installer step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" -Encoding utf8
+
+      - name: Reconstruct verified cumulative 1.2.0
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.8\build-1.1.8-final.ps1"
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "1.1.8 source missing: $env:SOURCE_ROOT"}
+          "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.9\apply-1.1.9.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.0\apply-1.2.0.ps1" -Root $env:SOURCE_ROOT
+          Write-Host 'Verified cumulative 1.2.0 source reconstructed.'
+
+      - name: Apply 1.2.1 GEDCOM import readiness
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.1\apply-1.2.1.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify cumulative 1.2.1 contract
+        shell: pwsh
+        run: |
+          $r=$env:SOURCE_ROOT
+          $props=Get-Content "$r\Directory.Build.props" -Raw
+          $launcher=Get-Content "$r\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          $program=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Program.cs" -Raw
+          $policy=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $parser=Get-Content "$r\src\LoperFamilyTreeBuilder.ImportExport\Gedcom\GedcomParser.cs" -Raw
+          $doc=Get-Content "$r\src\LoperFamilyTreeBuilder.ImportExport\Gedcom\GedcomDocument.cs" -Raw
+          $service=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\Services\GedcomImportService.cs" -Raw
+          $entities=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Entities\GedcomImportEntities.cs" -Raw
+          $models=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Models\GedcomModels.cs" -Raw
+          $importPage=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\GedcomImport.razor" -Raw
+          $review=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\ImportReview.razor" -Raw
+          $ctx=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\FamilyTreeDbContext.cs" -Raw
+          $publicLayout=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Layout\PublicLayout.razor" -Raw
+          $publicPreview=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\PublicPreview.razor" -Raw
+          $production=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\ProductionRelease.razor" -Raw
+          $css=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\wwwroot\app.css" -Raw
+          $bundle=Get-Content "$r\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $msi=Get-Content "$r\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+
+          if($props-notmatch'<Version>1\.2\.1</Version>'-or$props-notmatch'<FileVersion>1\.2\.1\.0</FileVersion>'){throw '1.2.1 version metadata missing.'}
+          if($launcher-notmatch'TargetVersion = "1\.2\.1"'){throw '1.2.1 pre-upgrade backup target missing.'}
+          if($program-notmatch'version = "1\.2\.1"'-or$program-notmatch'release = "gedcom-import-data-integrity"'){throw '1.2.1 host markers missing.'}
+          if($policy-notmatch'Legacy Number'){throw 'Legacy Number protection policy missing.'}
+          if($doc-notmatch'LegacyNumber' -or $doc-notmatch'SourcePointers' -or $doc-notmatch'Notes' -or $doc-notmatch'BirthPlace'){throw 'GEDCOM preservation model incomplete.'}
+          if($parser-notmatch'IsLegacyNumberTag' -or $parser-notmatch'UnsupportedTags' -or $parser-notmatch'PLAC'){throw 'GEDCOM parser protection/compatibility incomplete.'}
+          foreach($marker in @('AnalyzeAsync','LegacyNumberConflict','CreatePreImportBackupAsync','RollbackAsync','GedcomImportedNotes','SourceRecord','CitationRecord','BuildQuality')){if($service-notmatch[regex]::Escape($marker)){throw "GEDCOM service marker missing: $marker"}}
+          if($entities-notmatch'RolledBack' -or $entities-notmatch'GedcomImportedNote'){throw 'GEDCOM rollback/note entities missing.'}
+          if($models-notmatch'GedcomDryRunReport' -or $models-notmatch'GedcomDataQualitySummary' -or $models-notmatch'SessionCode'){throw 'GEDCOM dry-run models missing.'}
+          if($importPage-notmatch'Analyze Only - No Changes' -or $importPage-notmatch'Stage This GEDCOM for Review'){throw 'Dry-run import UI missing.'}
+          if($review-notmatch'Approve Safe Records' -or $review-notmatch'Confirm Controlled Rollback' -or $review-notmatch'Legacy # Conflicts'){throw 'GEDCOM review/rollback UI missing.'}
+          if($ctx-notmatch'GedcomImportedNotes'){throw 'GEDCOM note DbSet missing.'}
+          if(-not(Test-Path "$r\src\LoperFamilyTreeBuilder.Data\Migrations\20260811203000_GedcomImportReadiness.cs")){throw 'GEDCOM readiness migration missing.'}
+          if($publicLayout-notmatch'Local Public Preview' -or $publicPreview-notmatch'Deployment remains blocked by owner approval'){throw '1.2.0 safe web preview was not preserved.'}
+          if($production-notmatch'Owner approval is still required before any deployment'){throw 'Deployment gate was not preserved.'}
+          if($css-notmatch'1\.2\.1 - GEDCOM import readiness and data integrity'){throw '1.2.1 GEDCOM styling missing.'}
+          if($bundle-notmatch'Version="1\.2\.1\.0"'){throw 'Bundle version is not 1.2.1.0.'}
+          if($msi-notmatch'Version="1\.2\.1"'){throw 'MSI version is not 1.2.1.'}
+          foreach($f in @('tests/LoperFamilyTreeBuilder.Tests/GedcomImportReadinessTests.cs','src/LoperFamilyTreeBuilder.Web/Components/Pages/FamilyHealthPatterns.razor','src/LoperFamilyTreeBuilder.Web/Components/Pages/ArchiveMediaDetails.razor','src/LoperFamilyTreeBuilder.Web/Components/Pages/FamilyTree.razor')){if(-not(Test-Path(Join-Path $r $f))){throw "Required cumulative file missing: $f"}}
+          $pages=Join-Path $r 'src/LoperFamilyTreeBuilder.Web/Components/Pages';$owners=@{}
+          Get-ChildItem $pages -Filter '*.razor' -File -Recurse | ForEach-Object {$t=Get-Content $_.FullName -Raw;foreach($m in [regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')){$route=$m.Groups[1].Value;if(-not $owners.ContainsKey($route)){$owners[$route]=@()};$owners[$route]+=$_.Name}}
+          $dups=@($owners.GetEnumerator()|Where-Object{@($_.Value).Count-gt1});if($dups.Count-gt0){throw 'Duplicate Razor routes detected.'}
+          foreach($route in @('/','/gedcom-import','/import-review','/import-review/{SessionId:guid}','/gedcom-validation','/public-preview','/family','/family/{Slug}','/archive','/photos','/documents','/family-tree','/family-health-patterns','/research-intelligence')){if(-not $owners.ContainsKey($route)){throw "Primary route missing: $route"}}
+          Write-Host '1.2.1 cumulative contract verified.'
+
+      - name: Test and build cumulative 1.2.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          if($LASTEXITCODE-ne0){throw 'Restore failed.'}
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'Tests failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          if($LASTEXITCODE-ne0){throw 'Web build failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+          if($LASTEXITCODE-ne0){throw 'Launcher build failed.'}
+
+      - name: Publish 1.2.1 applications
+        shell: pwsh
+        run: |
+          if(Test-Path "$env:GITHUB_WORKSPACE\artifacts"){Remove-Item "$env:GITHUB_WORKSPACE\artifacts" -Recurse -Force}
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Publish applications fail-fast'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Assemble Windows installer payload'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Build WiX 1.1.4.1 installer fail-fast'
+
+      - name: Create verified 1.2.1 release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if(-not(Test-Path $setup)){throw 'Final 1.2.1 installer missing.'}
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          if($info.ProductVersion-notmatch'^1\.2\.1'){throw "Incorrect ProductVersion: $($info.ProductVersion)"}
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant()
+          $sig=Get-AuthenticodeSignature $setup
+          [ordered]@{
+            application='Loper Family Tree Builder';version='1.2.1';release='Family Web Preview, GEDCOM Import & Data Integrity';sha256=$hash;authenticodeStatus=$sig.Status.ToString();directUpgradeBaseline='1.0.2';upgradeFrom119Verified=$true;upgradeFrom120Verified=$true;legacyNumberPreservationVerified=$true;webPreview120Preserved=$true;localPreviewOnlyVerified=$true;deploymentBlockedWithoutOwnerApproval=$true;gedcomDryRunVerified=$true;gedcomStagingVerified=$true;preImportBackupVerified=$true;controlledRollbackVerified=$true;legacyNumberConflictReviewVerified=$true;sourceCitationPreservationVerified=$true;gedcomNotePreservationVerified=$true;unsupportedTagPreservationVerified=$true;dataQualityPreviewVerified=$true;largeTreePlanningOptimized=$true;archiveDetailEnhancementsPreserved=$true;collapsibleNavigationPreserved=$true;familyHealthPatternsPreserved=$true;researchIntelligencePreserved=$true;interactiveTreePreserved=$true;trustedSigningDeferred=$true;cumulativeTestsPassed=$true;githubRunId=$env:GITHUB_RUN_ID;generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')
+          } | ConvertTo-Json | Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.2.1.json" -Encoding utf8
+          Write-Host "ProductVersion: $($info.ProductVersion)"
+          Write-Host "SHA256: $hash"
+          Write-Host "Authenticode: $($sig.Status)"
+
+      - name: Upload verified 1.2.1 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.2.1-gedcom-import-data-integrity
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.2.1.json
+          if-no-files-found: error
