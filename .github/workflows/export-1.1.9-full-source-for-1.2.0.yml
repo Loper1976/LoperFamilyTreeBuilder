@@ -1,0 +1,64 @@
+name: Export reconstructed 1.1.9 source for 1.2.0
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.2.0-family-web-preview ]
+    paths:
+      - '.github/workflows/export-1.1.9-full-source-for-1.2.0.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Reconstruct verified cumulative 1.1.9
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+          $lines=Get-Content $workflow
+          $step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "Installer step not found: $Name"}
+          $run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"}
+          $block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){
+            if($lines[$i]-match '^      - '){break}
+            $line=$lines[$i]
+            if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()}
+            $block.Add($line)
+          }
+          & ([ScriptBlock]::Create(($block-join "`n")))
+          if(-not $?){throw "Installer step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" -Encoding utf8
+
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.8\build-1.1.8-final.ps1"
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "1.1.8 source missing: $env:SOURCE_ROOT"}
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.9\apply-1.1.9.ps1" -Root $env:SOURCE_ROOT
+          Write-Host 'Verified cumulative 1.1.9 source reconstructed.'
+
+      - name: Remove build output
+        shell: pwsh
+        run: |
+          $r=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          Get-ChildItem $r -Directory -Recurse -Force | Where-Object { $_.Name -in @('bin','obj') } | Sort-Object FullName -Descending | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Upload reconstructed source
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-1.1.9-full-source-for-1.2.0
+          path: source/LoperFamilyTreeBuilder_InstallerFirst_Phase3
+          if-no-files-found: error
