@@ -1,0 +1,190 @@
+@page "/archive/item/{MediaId:guid}"
+@rendermode InteractiveServer
+@inject ArchiveLibraryService Archive
+@inject PersonArchiveService PersonArchive
+@inject PersonLookupService Lookup
+@inject HeritageArchiveService Heritage
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Archive Detail - Loper Family Tree Builder</PageTitle>
+
+@if (_loading)
+{
+    <section class="page-card loading-card"><div class="loading-indicator"></div><div><strong>Opening archive item</strong><span>Loading preserved file, metadata, links and searchable text.</span></div></section>
+}
+else if (_detail is null)
+{
+    <section class="page-card error-state-card"><div class="error-state-icon">!</div><div><h1>Archive item not found</h1><p>The requested media record could not be opened.</p><a class="secondary-action inline-link-button" href="/archive">Return to Archive</a></div></section>
+}
+else
+{
+    <div class="page-header modern-page-header archive-detail-header">
+        <div>
+            <div class="page-eyebrow">@(_detail.Media.MediaType == ArchiveMediaType.Photo ? "Family Photo Archive" : "Family Document Archive")</div>
+            <h1>@DisplayTitle(_detail.Media)</h1>
+            <p>@_detail.Media.OriginalFileName · @FormatBytes(_detail.Media.FileSizeBytes) · preserved original with SHA-256 integrity</p>
+        </div>
+        <div class="page-header-actions">
+            <a class="secondary-action inline-link-button" href="@BackToWorkspace">Back to @(_detail.Media.MediaType == ArchiveMediaType.Photo ? "Photos" : "Documents")</a>
+            <a class="secondary-action inline-link-button" href="/archive">Archive Library</a>
+            <a class="primary-action inline-link-button" href="@($"/archive/media/{MediaId}")" target="_blank">Open Original</a>
+        </div>
+    </div>
+
+    <section class="archive-detail-statusbar">
+        <span class="archive-status-chip"><strong>@Format(_detail.Media.MediaType)</strong></span>
+        <span class="archive-status-chip">@Format(_detail.Media.ReviewStatus)</span>
+        <span class="archive-status-chip">@Format(_detail.Media.Visibility)</span>
+        @if(_detail.Media.IsFeatured){<span class="archive-status-chip featured">Featured</span>}
+        @if(_detail.Media.TranscriptionApproved){<span class="archive-status-chip approved">Searchable text approved</span>}
+    </section>
+
+    <div class="archive-detail-layout archive-detail-layout-119">
+        <section class="page-card archive-viewer-card enhanced-archive-viewer">
+            <div class="archive-viewer-toolbar">
+                <div>
+                    <strong>Preserved Original</strong>
+                    <span>The original archive file is never modified by viewer controls.</span>
+                </div>
+                @if (_detail.Media.MediaType == ArchiveMediaType.Photo)
+                {
+                    <div class="viewer-button-group">
+                        <button class="secondary-action compact-action" @onclick="ZoomOut" disabled="@(_photoZoomPercent <= 50)">−</button>
+                        <span class="zoom-readout">@_photoZoomPercent%</span>
+                        <button class="secondary-action compact-action" @onclick="ZoomIn" disabled="@(_photoZoomPercent >= 300)">+</button>
+                        <button class="secondary-action compact-action" @onclick="ResetZoom">Reset</button>
+                    </div>
+                }
+            </div>
+
+            @if (_detail.Media.MediaType == ArchiveMediaType.Photo)
+            {
+                <div class="archive-photo-canvas">
+                    <img class="archive-detail-image zoomable-archive-image" style="@PhotoImageStyle" src="@($"/archive/media/{MediaId}")" alt="@DisplayTitle(_detail.Media)" />
+                </div>
+            }
+            else if (_detail.Media.MimeType.Contains("pdf", StringComparison.OrdinalIgnoreCase))
+            {
+                <iframe class="archive-pdf-viewer enhanced-pdf-viewer" src="@($"/archive/media/{MediaId}")" title="@DisplayTitle(_detail.Media)"></iframe>
+            }
+            else
+            {
+                <div class="archive-file-placeholder enhanced-file-placeholder"><strong>@_detail.Media.MediaType</strong><span>@_detail.Media.MimeType</span><p>This file type opens in its native viewer.</p><a class="primary-action inline-link-button" href="@($"/archive/media/{MediaId}")" target="_blank">Open File</a></div>
+            }
+        </section>
+
+        <section class="page-card archive-editor-card">
+            <div class="archive-section-heading"><div><h2>Catalog &amp; Description</h2><p>Describe what this item is, when and where it belongs, and how it entered the family archive.</p></div></div>
+            <div class="archive-upload-grid refined-metadata-grid">
+                <div class="archive-field-wide"><label>Title</label><input @bind="_edit.Title" /></div>
+                <div class="archive-field-wide"><label>Description</label><textarea rows="5" @bind="_edit.Description"></textarea></div>
+                <div><label>Approximate date</label><input @bind="_edit.ApproximateDateText" placeholder="e.g. Summer 1946" /></div>
+                <div><label>Place</label><input @bind="_edit.PlaceName" /></div>
+                <div class="archive-field-wide"><label>Tags</label><input @bind="_edit.Tags" placeholder="Navy, Texas, reunion, cemetery" /></div>
+                <div class="archive-field-wide"><label>Provenance</label><textarea rows="3" @bind="_edit.Provenance"></textarea></div>
+                <div class="archive-field-wide"><label>Source summary</label><textarea rows="3" @bind="_edit.SourceSummary"></textarea></div>
+                <div><label>Original owner</label><input @bind="_edit.OriginalOwner" /></div>
+                <div><label>Visibility</label><select @bind="_edit.Visibility">@foreach(var v in Enum.GetValues<ArchiveVisibility>()){<option value="@v">@Format(v)</option>}</select></div>
+                <div><label>Review status</label><select @bind="_edit.ReviewStatus">@foreach(var v in Enum.GetValues<ArchiveReviewStatus>()){<option value="@v">@Format(v)</option>}</select></div>
+                <div class="archive-checkbox-field"><label><input type="checkbox" @bind="_edit.IsFeatured" /> Featured archive item</label></div>
+                <div class="archive-field-wide"><label>Usage / rights notes</label><textarea rows="3" @bind="_edit.UsageRightsNotes"></textarea></div>
+            </div>
+            <div class="form-actions"><button class="primary-action" @onclick="SaveCatalogAsync">Save Archive Metadata</button></div>
+            @if(!string.IsNullOrWhiteSpace(_message)){<div class="alert archive-save-message">@_message</div>}
+        </section>
+    </div>
+
+    <section class="page-card archive-integrity-card">
+        <div class="archive-section-heading"><div><h2>File Integrity &amp; Embedded Metadata</h2><p>Technical metadata is preserved separately from editable catalog information.</p></div></div>
+        <div class="archive-metadata-grid enhanced-metadata-grid">
+            <div><span>SHA-256</span><code>@_detail.Media.Sha256</code></div>
+            <div><span>Capture date</span><strong>@(_detail.Media.CaptureDateTime?.ToString("g") ?? "Not recorded")</strong></div>
+            <div><span>Camera / device</span><strong>@Empty(_detail.Media.DeviceOrCamera)</strong></div>
+            <div><span>GPS</span><strong>@Gps(_detail.Media)</strong></div>
+            <div><span>Photographer</span><strong>@Empty(_detail.Media.Photographer)</strong></div>
+            <div><span>Original owner</span><strong>@Empty(_detail.OriginalOwner)</strong></div>
+        </div>
+        @if(_detail.Media.Latitude.HasValue && _detail.Media.Longitude.HasValue)
+        {
+            <div class="archive-map-note"><strong>Location evidence</strong><span>GPS coordinates preserved from the archive record: @_detail.Media.Latitude, @_detail.Media.Longitude.</span></div>
+        }
+        @if(!string.IsNullOrWhiteSpace(_detail.CapturedMetadataJson))
+        {
+            <details class="metadata-details"><summary>View captured metadata snapshot</summary><pre class="metadata-json">@_detail.CapturedMetadataJson</pre></details>
+        }
+    </section>
+
+    <div class="archive-detail-columns archive-linking-columns">
+        <section class="page-card">
+            <div class="archive-section-heading"><div><h2>People</h2><p>Identify the relatives represented by this archive item without changing their genealogy facts.</p></div></div>
+            @if(_detail.People.Count==0){<p class="archive-empty-note">No people identified yet.</p>}
+            else{<div class="archive-link-list">@foreach(var p in _detail.People){<a href="@($"/people/{p.PersonId}")"><strong>@p.DisplayName</strong><span>@Format(p.Role) @(!string.IsNullOrWhiteSpace(p.LegacyNumber)?$" · Legacy {p.LegacyNumber}":"")</span></a>}</div>}
+            <div class="archive-inline-add"><input @bind="_personSearch" placeholder="Find person by name or Legacy Number" /><button class="secondary-action" @onclick="SearchPeopleAsync">Find</button></div>
+            @if(_peopleResults.Count>0){<div class="relationship-results">@foreach(var p in _peopleResults){<button class="relationship-result-row" @onclick="()=>SelectPerson(p)"><span><strong>@p.DisplayName</strong></span><small>@p.LegacyNumber</small></button>}</div>}
+            @if(_selectedPerson is not null){<div class="archive-inline-add"><select @bind="_personRole">@foreach(var r in Enum.GetValues<PersonMediaRole>()){<option value="@r">@Format(r)</option>}</select><button class="primary-action" @onclick="LinkPersonAsync">Link @_selectedPerson.DisplayName</button></div>}
+        </section>
+
+        <section class="page-card">
+            <div class="archive-section-heading"><div><h2>Collections</h2><p>Organize this item into family, military, cemetery, place, event or custom collections.</p></div></div>
+            @if(_detail.Collections.Count==0){<p class="archive-empty-note">This item is not in a collection.</p>}
+            else{<div class="archive-link-list">@foreach(var c in _detail.Collections){<a href="@($"/archive?collection={c.CollectionId}")"><strong>@c.CollectionName</strong><span>@(c.IsPublic?"Public collection":"Private collection")</span></a>}</div>}
+            <div class="archive-inline-add"><select @bind="_collectionId"><option value="">Choose collection</option>@foreach(var c in _collections){<option value="@c.Id.ToString()">@c.Name</option>}</select><button class="secondary-action" @onclick="AddCollectionAsync">Add to Collection</button></div>
+        </section>
+    </div>
+
+    <section class="page-card">
+        <div class="archive-section-heading"><div><h2>Timeline &amp; Event Links</h2><p>Connect the archive evidence to an existing life event while preserving the original event history.</p></div></div>
+        @if(_detail.TimelineEvents.Count>0){<div class="archive-link-list">@foreach(var e in _detail.TimelineEvents){<a href="@($"/people/{e.PersonId}")"><strong>@e.Title</strong><span>@e.PersonName · @e.EventType · @(e.EventDate?.ToString("yyyy-MM-dd")??e.PlaceName)</span></a>}</div>}
+        else{<p class="archive-empty-note">No timeline events linked yet.</p>}
+        <div class="archive-inline-add"><select @bind="_timelineId"><option value="">Choose recorded timeline event</option>@foreach(var e in _timelineOptions.Take(500)){<option value="@e.Id.ToString()">@e.PersonName · @e.Title · @(e.EventDate?.Year.ToString()??e.ApproximateYear?.ToString()??"")</option>}</select><button class="secondary-action" @onclick="LinkTimelineAsync">Link Event</button></div>
+    </section>
+
+    @if(_detail.Media.MediaType==ArchiveMediaType.Document)
+    {
+        <section class="page-card transcription-review-card">
+            <div class="archive-section-heading transcription-heading">
+                <div><div class="page-eyebrow">OCR &amp; Transcription Review</div><h2>Searchable Document Text</h2><p>Review OCR, handwriting transcription, human transcription or AI-proposed text without altering the preserved original document.</p></div>
+                <div class="transcription-summary"><span>@_transcriptionText.Length.ToString("N0") characters</span><span class="archive-type-badge">@(_detail.Media.TranscriptionApproved?"Approved":"Needs review")</span></div>
+            </div>
+            <div class="transcription-review-toolbar">
+                <div class="filter-field"><label>Text origin</label><select @bind="_transcriptionOrigin">@foreach(var o in Enum.GetValues<TranscriptionOrigin>()){<option value="@o">@o</option>}</select></div>
+                <label class="transcription-approval-toggle"><input type="checkbox" @bind="_transcriptionApproved" /><span>Reviewed and approved for archive search</span></label>
+            </div>
+            <textarea class="transcription-editor enhanced-transcription-editor" rows="20" @bind="_transcriptionText" placeholder="OCR or transcription text appears here for review."></textarea>
+            <div class="transcription-review-footer"><p>AI-generated or OCR text remains a proposal until a reviewer approves it.</p><button class="primary-action" @onclick="SaveTranscriptionAsync">Save Searchable Text</button></div>
+        </section>
+    }
+}
+
+@code {
+    [Parameter] public Guid MediaId { get; set; }
+    private bool _loading=true; private string _message=string.Empty;
+    private ArchiveMediaDetail? _detail; private UpdateArchiveCatalogRequest _edit=new();
+    private string _personSearch=string.Empty; private IReadOnlyList<PersonLookupItem> _peopleResults=[]; private PersonLookupItem? _selectedPerson; private PersonMediaRole _personRole=PersonMediaRole.Photo;
+    private IReadOnlyList<ArchiveCollectionListItem> _collections=[]; private string _collectionId=string.Empty;
+    private IReadOnlyList<TimelineEventListItem> _timelineOptions=[]; private string _timelineId=string.Empty;
+    private string _transcriptionText=string.Empty; private TranscriptionOrigin _transcriptionOrigin=TranscriptionOrigin.Human; private bool _transcriptionApproved;
+    private int _photoZoomPercent=100;
+
+    private string BackToWorkspace => _detail?.Media.MediaType==ArchiveMediaType.Photo?"/photos":"/documents";
+    private string PhotoImageStyle => $"width:{_photoZoomPercent}%;max-width:none;";
+
+    protected override async Task OnParametersSetAsync(){_photoZoomPercent=100;await ReloadAsync();}
+    private async Task ReloadAsync(){_loading=true;try{_detail=await Archive.GetDetailAsync(MediaId);if(_detail is not null){_edit=new(){MediaFileId=MediaId,Title=_detail.Media.Title,Description=_detail.Media.Description,ApproximateDateText=_detail.Media.ApproximateDateText,PlaceName=_detail.Media.PlaceName,Provenance=_detail.Media.Provenance,Tags=_detail.Media.Tags,SourceSummary=_detail.SourceSummary,OriginalOwner=_detail.OriginalOwner,UsageRightsNotes=_detail.UsageRightsNotes,CapturedMetadataJson=_detail.CapturedMetadataJson,Visibility=_detail.Media.Visibility,ReviewStatus=_detail.Media.ReviewStatus,IsFeatured=_detail.Media.IsFeatured};_transcriptionText=_detail.TranscriptionText;_transcriptionOrigin=_detail.TranscriptionOrigin??TranscriptionOrigin.Human;_transcriptionApproved=_detail.Media.TranscriptionApproved;}_collections=await Archive.GetCollectionsAsync();_timelineOptions=await Heritage.GetTimelineAsync();}finally{_loading=false;}}
+    private async Task<string> ActorAsync(){var state=await AuthenticationStateProvider.GetAuthenticationStateAsync();return state.User.Identity?.Name??"Archive Administrator";}
+    private async Task SaveCatalogAsync(){await Archive.UpdateCatalogAsync(_edit,await ActorAsync());_message="Archive metadata saved.";await ReloadAsync();}
+    private async Task SearchPeopleAsync()=>_peopleResults=await Lookup.SearchAsync(_personSearch,Guid.Empty);
+    private void SelectPerson(PersonLookupItem p){_selectedPerson=p;_personSearch=p.DisplayName;_peopleResults=[];_personRole=_detail?.Media.MediaType==ArchiveMediaType.Document?PersonMediaRole.Document:PersonMediaRole.Photo;}
+    private async Task LinkPersonAsync(){if(_selectedPerson is null)return;await Archive.LinkPersonAsync(MediaId,_selectedPerson.Id,_personRole,string.Empty,await ActorAsync());_selectedPerson=null;await ReloadAsync();}
+    private async Task AddCollectionAsync(){if(!Guid.TryParse(_collectionId,out var id))return;await Archive.AddToCollectionAsync(id,MediaId,string.Empty,await ActorAsync());_collectionId=string.Empty;await ReloadAsync();}
+    private async Task LinkTimelineAsync(){if(!Guid.TryParse(_timelineId,out var id))return;await Archive.LinkTimelineEventAsync(MediaId,id,string.Empty,await ActorAsync());_timelineId=string.Empty;await ReloadAsync();}
+    private async Task SaveTranscriptionAsync(){await PersonArchive.SaveTranscriptionAsync(MediaId,_transcriptionText,_transcriptionOrigin,_transcriptionApproved,await ActorAsync());_message="Searchable document text saved.";await ReloadAsync();}
+    private void ZoomIn()=>_photoZoomPercent=Math.Min(300,_photoZoomPercent+25);
+    private void ZoomOut()=>_photoZoomPercent=Math.Max(50,_photoZoomPercent-25);
+    private void ResetZoom()=>_photoZoomPercent=100;
+    private static string DisplayTitle(ArchiveLibraryItem m)=>!string.IsNullOrWhiteSpace(m.Title)?m.Title:m.OriginalFileName;
+    private static string Empty(string value)=>string.IsNullOrWhiteSpace(value)?"Not recorded":value;
+    private static string Gps(ArchiveLibraryItem m)=>m.Latitude.HasValue&&m.Longitude.HasValue?$"{m.Latitude}, {m.Longitude}":"Not recorded";
+    private static string FormatBytes(long v)=>v>=1024*1024?$"{v/(1024d*1024d):N1} MB":$"{Math.Max(v/1024d,0):N1} KB";
+    private static string Format(Enum value)=>string.Concat(value.ToString().Select((c,i)=>i>0&&char.IsUpper(c)?" "+c:c.ToString()));
+}
