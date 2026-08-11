@@ -1,0 +1,126 @@
+@page "/archive"
+@rendermode InteractiveServer
+@inject ArchiveLibraryService Archive
+
+<PageTitle>Archive Library - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header">
+    <div>
+        <div class="page-eyebrow">Digital Family Archive</div>
+        <h1>Photo &amp; Document Archive</h1>
+        <p>Search preserved originals, OCR/transcription text, people, locations, collections, captions and archive metadata from one workspace.</p>
+    </div>
+    <div class="page-header-actions">
+        <a class="secondary-action inline-link-button" href="/archive/review">Review Queue</a>
+        <a class="secondary-action inline-link-button" href="/archive/collections">Collections</a>
+        <a class="primary-action inline-link-button" href="/archive/import">Bulk Import</a>
+    </div>
+</div>
+
+<section class="page-card archive-library-toolbar">
+    <div class="archive-search-row"><div class="filter-field"><label>Search the entire archive</label><input @bind="_request.Query" @bind:event="oninput" placeholder="Name, Legacy Number, OCR text, place, filename, tag or description" /></div><div class="archive-toolbar-actions"><button class="primary-action" @onclick="SearchAsync">Search</button><button class="secondary-action" @onclick="ClearAsync">Clear</button></div></div>
+    <div class="archive-filter-grid">
+        <div class="filter-field"><label>Media type</label><select @bind="_mediaType"><option value="">All media</option><option value="Photo">Photos</option><option value="Document">Documents</option><option value="Audio">Audio</option><option value="Video">Video</option><option value="Other">Other</option></select></div>
+        <div class="filter-field"><label>Review status</label><select @bind="_review"><option value="">All statuses</option>@foreach(var value in Enum.GetValues<ArchiveReviewStatus>()){<option value="@value.ToString()">@Format(value)</option>}</select></div>
+        <div class="filter-field"><label>GPS metadata</label><select @bind="_gps"><option value="">Any</option><option value="yes">Has GPS</option><option value="no">No GPS</option></select></div>
+        <div class="filter-field"><label>Searchable text</label><select @bind="_transcription"><option value="">Any</option><option value="yes">Has OCR/transcription</option><option value="no">No OCR/transcription</option></select></div>
+    </div>
+    <div class="archive-view-shortcuts"><span>Focused workspaces:</span><a href="/photos">Photos</a><a href="/documents">Documents</a></div>
+</section>
+
+@if (_loading)
+{
+    <section class="page-card loading-card"><div class="loading-indicator"></div><div><strong>Searching archive</strong><span>Reading indexed archive metadata and transcriptions.</span></div></section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="page-card error-state-card"><div class="error-state-icon">!</div><div><h2>Archive search could not be completed</h2><p>@_error</p><button class="secondary-action" @onclick="SearchAsync">Try Again</button></div></section>
+}
+else if (_result is not null)
+{
+    <div class="archive-result-summary"><strong>@_result.TotalCount.ToString("N0")</strong> archived item(s) · page @_result.Page of @_result.TotalPages</div>
+    @if (_result.Items.Count == 0)
+    {
+        <section class="page-card empty-state"><h2>No matching archive items</h2><p>Try a broader search or use Bulk Import to add preserved originals.</p></section>
+    }
+    else
+    {
+        <section class="archive-media-grid">
+            @foreach (var item in _result.Items)
+            {
+                <article class="archive-media-card">
+                    <a class="archive-preview" href="@($"/archive/item/{item.MediaFileId}")">
+                        @if (item.MediaType == ArchiveMediaType.Photo)
+                        {
+                            <img src="@($"/archive/media/{item.MediaFileId}")" alt="@DisplayTitle(item)" loading="lazy" />
+                        }
+                        else
+                        {
+                            <div class="archive-document-icon">@DocumentIcon(item)</div>
+                        }
+                    </a>
+                    <div class="archive-media-card-body">
+                        <div class="archive-card-title-row"><a href="@($"/archive/item/{item.MediaFileId}")"><strong>@DisplayTitle(item)</strong></a><span class="archive-type-badge">@item.MediaType</span></div>
+                        <div class="archive-card-meta">@DatePlace(item)</div>
+                        @if (!string.IsNullOrWhiteSpace(item.Description)){<p>@Excerpt(item.Description, 120)</p>}
+                        <div class="archive-chip-row">
+                            @if(item.LinkedPeopleCount>0){<span>@item.LinkedPeopleCount person@(item.LinkedPeopleCount==1?"":"s")</span>}
+                            @if(item.HasTranscription){<span>Searchable text</span>}
+                            @if(item.Latitude.HasValue&&item.Longitude.HasValue){<span>GPS</span>}
+                            <span>@Format(item.ReviewStatus)</span>
+                        </div>
+                    </div>
+                </article>
+            }
+        </section>
+        <div class="pagination-bar">
+            <button class="secondary-action" disabled="@(!_result.HasPreviousPage)" @onclick="PreviousAsync">Previous</button>
+            <span>Page @_result.Page of @_result.TotalPages</span>
+            <button class="secondary-action" disabled="@(!_result.HasNextPage)" @onclick="NextAsync">Next</button>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "collection")] public Guid? CollectionId { get; set; }
+    [SupplyParameterFromQuery(Name = "type")] public string? TypeFilter { get; set; }
+
+    private ArchiveLibrarySearchRequest _request = new() { PageSize = 48 };
+    private PagedResult<ArchiveLibraryItem>? _result;
+    private bool _loading;
+    private string _error = string.Empty;
+    private string _mediaType = string.Empty;
+    private string _review = string.Empty;
+    private string _gps = string.Empty;
+    private string _transcription = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _request.CollectionId = CollectionId;
+        if (!string.IsNullOrWhiteSpace(TypeFilter)) _mediaType = TypeFilter;
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _loading = true; _error = string.Empty;
+        try
+        {
+            _request.MediaType = Enum.TryParse<ArchiveMediaType>(_mediaType, out var mt) ? mt : null;
+            _request.ReviewStatus = Enum.TryParse<ArchiveReviewStatus>(_review, out var rs) ? rs : null;
+            _request.HasGps = _gps == "yes" ? true : _gps == "no" ? false : null;
+            _request.HasTranscription = _transcription == "yes" ? true : _transcription == "no" ? false : null;
+            _result = await Archive.SearchAsync(_request);
+        }
+        catch(Exception ex){_error=ex.Message;}
+        finally{_loading=false;}
+    }
+    private async Task ClearAsync(){_request=new(){PageSize=48};_mediaType=_review=_gps=_transcription=string.Empty;await SearchAsync();}
+    private async Task PreviousAsync(){if(_result?.HasPreviousPage==true){_request.Page--;await SearchAsync();}}
+    private async Task NextAsync(){if(_result?.HasNextPage==true){_request.Page++;await SearchAsync();}}
+    private static string DisplayTitle(ArchiveLibraryItem item)=>!string.IsNullOrWhiteSpace(item.Title)?item.Title:item.OriginalFileName;
+    private static string DocumentIcon(ArchiveLibraryItem item)=>item.MimeType.Contains("pdf",StringComparison.OrdinalIgnoreCase)?"PDF":"DOC";
+    private static string DatePlace(ArchiveLibraryItem item)=>string.Join(" · ",new[]{item.CaptureDateTime?.ToString("yyyy-MM-dd"),item.ApproximateDateText,item.PlaceName}.Where(x=>!string.IsNullOrWhiteSpace(x)));
+    private static string Excerpt(string text,int max)=>text.Length<=max?text:text[..max]+"…";
+    private static string Format(Enum value)=>string.Concat(value.ToString().Select((c,i)=>i>0&&char.IsUpper(c)?" "+c:c.ToString()));
+}
