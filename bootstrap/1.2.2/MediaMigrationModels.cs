@@ -1,0 +1,7 @@
+using LoperFamilyTreeBuilder.Core.Entities;
+
+namespace LoperFamilyTreeBuilder.Core.Models;
+
+public sealed record MediaMigrationSessionSummary(Guid SessionId,string SessionCode,MediaMigrationSourceType SourceType,string SourceRootPath,MediaMigrationStatus Status,int FilesScanned,int ReadyToImportCount,int ExactDuplicateCount,int NeedsReviewCount,int ImportedCount,int FailedCount,DateTimeOffset CreatedUtc,DateTimeOffset? CompletedUtc);
+public sealed record MediaMigrationItemView(Guid ItemId,string SourceRelativePath,string OriginalFileName,long FileSizeBytes,ArchiveMediaType MediaType,string Sha256,MediaMigrationItemStatus Status,Guid? ExistingMediaFileId,Guid? SuggestedPersonId,string SuggestedPersonName,string SuggestedLegacyNumber,string SuggestedMatchReason,Guid? ImportedMediaFileId,string ReviewNote);
+public sealed record MediaMigrationAnalysisResult(MediaMigrationSessionSummary Session,IReadOnlyList<MediaMigrationItemView> Items);
