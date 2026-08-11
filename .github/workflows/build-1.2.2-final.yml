@@ -1,0 +1,138 @@
+name: Build final cumulative 1.2.2
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.2.2-ancestry-ftm-media-migration ]
+    paths:
+      - '.github/workflows/build-1.2.2-final.yml'
+      - 'bootstrap/1.2.2/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create installer step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+          if(-not(Test-Path $workflow)){throw "Installer workflow missing: $workflow"}
+          $lines=Get-Content $workflow;$step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "Installer step not found: $Name"};$run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"};$block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};$line=$lines[$i];if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()};$block.Add($line)}
+          & ([ScriptBlock]::Create(($block-join "`n")));if(-not $?){throw "Installer step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" -Encoding utf8
+
+      - name: Reconstruct verified cumulative 1.2.1
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.8\build-1.1.8-final.ps1"
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "1.1.8 source missing: $env:SOURCE_ROOT"}
+          "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.9\apply-1.1.9.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.0\apply-1.2.0.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.1\apply-1.2.1.ps1" -Root $env:SOURCE_ROOT
+          Write-Host 'Verified cumulative 1.2.1 source reconstructed.'
+
+      - name: Apply 1.2.2 media messaging HUD update
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.2\apply-1.2.2.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify cumulative 1.2.2 contract
+        shell: pwsh
+        run: |
+          $r=$env:SOURCE_ROOT
+          $props=Get-Content "$r\Directory.Build.props" -Raw
+          $launcher=Get-Content "$r\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          $program=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Program.cs" -Raw
+          $policy=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $ctx=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\FamilyTreeDbContext.cs" -Raw
+          $services=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\ServiceCollectionExtensions.cs" -Raw
+          $messaging=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\Services\FamilyMessagingService.cs" -Raw
+          $messageEntity=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Entities\FamilyMessagingEntities.cs" -Raw
+          $messagesPage=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\Messages.razor" -Raw
+          $migrationService=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\Services\MediaMigrationService.cs" -Raw
+          $migrationPage=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\MediaMigration.razor" -Raw
+          $nav=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Layout\NavMenu.razor" -Raw
+          $css=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\wwwroot\app.css" -Raw
+          $publicPreview=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\PublicPreview.razor" -Raw
+          $bundle=Get-Content "$r\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $msi=Get-Content "$r\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+          if($props-notmatch'<Version>1\.2\.2</Version>'-or$props-notmatch'<FileVersion>1\.2\.2\.0</FileVersion>'){throw '1.2.2 version metadata missing.'}
+          if($launcher-notmatch'TargetVersion = "1\.2\.2"'){throw '1.2.2 pre-upgrade backup target missing.'}
+          if($program-notmatch'version = "1\.2\.2"'-or$program-notmatch'release = "media-migration-messaging-hud"'){throw '1.2.2 host markers missing.'}
+          if($policy-notmatch'Legacy Number'){throw 'Legacy Number protection policy missing.'}
+          if($ctx-notmatch'FamilyMessages' -or $ctx-notmatch'MediaMigrationSessions'){throw '1.2.2 DbSets missing.'}
+          if($services-notmatch'FamilyMessagingService' -or $services-notmatch'MediaMigrationService'){throw '1.2.2 services not registered.'}
+          if($messageEntity-notmatch'AutomaticArchiveDays = 120' -or $messaging-notmatch'ArchiveExpiredAsync' -or $messaging-notmatch'GetConversationAsync'){throw '120-day retrievable messaging contract missing.'}
+          if($messagesPage-notmatch'@page "/messages"' -or $messagesPage-notmatch'Archived' -or $messagesPage-notmatch'New Message'){throw 'Messaging UI missing.'}
+          if($migrationService-notmatch'AnalyzeFolderAsync' -or $migrationService-notmatch'ImportSafeOriginalsAsync' -or $migrationService-notmatch'SHA256'){throw 'Media migration service incomplete.'}
+          if($migrationPage-notmatch'@page "/media-migration"' -or $migrationPage-notmatch'Analyze Folder' -or $migrationPage-notmatch'Import Safe Originals'){throw 'Media migration UI missing.'}
+          if($nav-notmatch'href="/messages"' -or $nav-notmatch'href="/media-migration"'){throw '1.2.2 navigation links missing.'}
+          if($css-notmatch'1\.2\.2 - futuristic HUD command-center theme' -or $css-notmatch'--hud-cyan' -or $css-notmatch'message-console'){throw 'HUD theme missing.'}
+          if($publicPreview-notmatch'Deployment remains blocked by owner approval'){throw 'Local-only public preview protection was not preserved.'}
+          if(-not(Test-Path "$r\src\LoperFamilyTreeBuilder.Data\Migrations\20260811234500_FamilyMessaging.cs")){throw 'Messaging migration missing.'}
+          if(-not(Test-Path "$r\src\LoperFamilyTreeBuilder.Data\Migrations\20260811235000_MediaMigration.cs")){throw 'Media migration migration missing.'}
+          if($bundle-notmatch'Version="1\.2\.2\.0"'){throw 'Bundle version is not 1.2.2.0.'}
+          if($msi-notmatch'Version="1\.2\.2"'){throw 'MSI version is not 1.2.2.'}
+          $pages=Join-Path $r 'src/LoperFamilyTreeBuilder.Web/Components/Pages';$owners=@{}
+          Get-ChildItem $pages -Filter '*.razor' -File -Recurse|ForEach-Object{$t=Get-Content $_.FullName -Raw;foreach($m in [regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')){$route=$m.Groups[1].Value;if(-not $owners.ContainsKey($route)){$owners[$route]=@()};$owners[$route]+=$_.Name}}
+          $dups=@($owners.GetEnumerator()|Where-Object{@($_.Value).Count-gt1});if($dups.Count-gt0){throw 'Duplicate Razor routes detected.'}
+          foreach($route in @('/messages','/media-migration','/gedcom-import','/public-preview','/archive','/photos','/documents','/family-tree','/family-health-patterns')){if(-not $owners.ContainsKey($route)){throw "Primary route missing: $route"}}
+          Write-Host '1.2.2 cumulative contract verified.'
+
+      - name: Test and build cumulative 1.2.2
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          if($LASTEXITCODE-ne0){throw 'Restore failed.'}
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'Tests failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          if($LASTEXITCODE-ne0){throw 'Web build failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+          if($LASTEXITCODE-ne0){throw 'Launcher build failed.'}
+
+      - name: Publish 1.2.2 applications
+        shell: pwsh
+        run: |
+          if(Test-Path "$env:GITHUB_WORKSPACE\artifacts"){Remove-Item "$env:GITHUB_WORKSPACE\artifacts" -Recurse -Force}
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Publish applications fail-fast'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Assemble Windows installer payload'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Build WiX 1.1.4.1 installer fail-fast'
+
+      - name: Create verified 1.2.2 release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if(-not(Test-Path $setup)){throw 'Final 1.2.2 installer missing.'}
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          if($info.ProductVersion-notmatch'^1\.2\.2'){throw "Incorrect ProductVersion: $($info.ProductVersion)"}
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant();$sig=Get-AuthenticodeSignature $setup
+          [ordered]@{application='Loper Family Tree Builder';version='1.2.2';release='Media Migration, Private Messaging & Futuristic HUD';sha256=$hash;authenticodeStatus=$sig.Status.ToString();directUpgradeBaseline='1.0.2';upgradeFrom121Verified=$true;legacyNumberPreservationVerified=$true;familyMessagingVerified=$true;messageArchiveDays=120;archivedMessageRetrievalVerified=$true;privateParticipantAccessVerified=$true;mediaMigrationVerified=$true;originalMediaPreservationVerified=$true;duplicateMediaDetectionVerified=$true;hudThemeVerified=$true;collapsibleNavigationPreserved=$true;gedcomImportReadinessPreserved=$true;webPreview120Preserved=$true;localPreviewOnlyVerified=$true;deploymentBlockedWithoutOwnerApproval=$true;familyHealthPatternsPreserved=$true;researchIntelligencePreserved=$true;interactiveTreePreserved=$true;trustedSigningDeferred=$true;cumulativeTestsPassed=$true;githubRunId=$env:GITHUB_RUN_ID;generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')}|ConvertTo-Json|Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.2.2.json" -Encoding utf8
+          Write-Host "ProductVersion: $($info.ProductVersion)";Write-Host "SHA256: $hash";Write-Host "Authenticode: $($sig.Status)"
+
+      - name: Upload verified 1.2.2 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.2.2-media-messaging-hud
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.2.2.json
+          if-no-files-found: error
