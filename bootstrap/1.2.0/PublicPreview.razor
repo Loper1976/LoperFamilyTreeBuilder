@@ -1,0 +1,27 @@
+@page "/public-preview"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = "ArchiveAdmin")]
+@inject PublicProfileService Profiles
+@inject LoperFamilyTreeBuilder.Infrastructure.Configuration.WebExperienceOptions WebOptions
+
+<PageTitle>Public Preview - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header"><div><div class="page-eyebrow">FAMILY WEB EXPERIENCE</div><h1>Public Preview Center</h1><p>Review exactly what the family-facing experience can show before any future deployment to loper.family.</p></div><a class="primary-action inline-link-button" href="/family" target="_blank">Open Public Preview</a></div>
+
+<div class="preview-safety-banner"><strong>@(WebOptions.HostedMode ? "Hosted mode is enabled" : "Local preview only")</strong><span>@(WebOptions.HostedMode ? "Review hosting and privacy settings carefully before public use." : "This installation is not publishing the family archive to the internet.")</span></div>
+
+<div class="summary-grid public-preview-summary"><div class="summary-card"><div class="summary-value">@_published.Count</div><div class="summary-label">Discoverable Public Profiles</div></div><div class="summary-card"><div class="summary-value">@(WebOptions.HostedMode ? "ON" : "OFF")</div><div class="summary-label">Hosted Mode</div></div><div class="summary-card"><div class="summary-value">@FormatMode()</div><div class="summary-label">Access Mode</div></div></div>
+
+<section class="page-card"><div class="section-heading-row"><div><h2>Safe Preview Workflow</h2><p>The preview uses the same anonymous public routes and privacy filters that a future website would use.</p></div></div><div class="preview-check-grid"><div><strong>1. Set privacy</strong><span>Only people explicitly marked Public are eligible.</span></div><div><strong>2. Configure profile</strong><span>Choose exactly which sections may appear publicly.</span></div><div><strong>3. Review living people</strong><span>Living-person publication requires explicit authorization.</span></div><div><strong>4. Preview anonymously</strong><span>Open the public directory and profiles before any future deployment.</span></div></div></section>
+
+<section class="page-card"><div class="section-heading-row"><div><h2>Public Experience Controls</h2><p>Manage privacy and published content without exposing the rest of the private application.</p></div></div><div class="admin-shortcut-grid"><a href="/public-profiles"><strong>Public Profiles</strong><span>Publish, unpublish and choose visible sections.</span></a><a href="/privacy-access"><strong>Privacy &amp; Access</strong><span>Control person-level privacy and living-person protections.</span></a><a href="/web-experience"><strong>Web Experience</strong><span>Review local versus hosted configuration.</span></a><a href="/hosting"><strong>Hosted Deployment</strong><span>Check readiness only. No deployment is performed here.</span></a></div></section>
+
+<section class="page-card"><div class="section-heading-row"><div><h2>Currently Discoverable</h2><p>These are the profiles that appear in the public family directory right now.</p></div></div>@if(_published.Count==0){<div class="empty-state"><h3>No public profiles yet</h3><p>This is safe. Nothing will appear until a profile is deliberately approved.</p></div>}else{<div class="preview-profile-list">@foreach(var item in _published){<a href="@($"/family/{item.Slug}")" target="_blank"><span><strong>@item.DisplayName</strong><small>@item.LifeYears</small></span><span>Preview →</span></a>}</div>}</section>
+
+<section class="page-card preservation-gate"><h2>Deployment remains blocked by owner approval</h2><p>Version 1.2.0 prepares and previews the family web experience locally. It does not deploy, publish, configure DNS, or move the authoritative archive to loper.family.</p></section>
+
+@code {
+    private IReadOnlyList<PublicDirectoryItem> _published=[];
+    protected override async Task OnInitializedAsync()=>_published=await Profiles.GetDirectoryAsync(string.Empty,500);
+    private string FormatMode()=>WebOptions.AccessMode switch{LoperFamilyTreeBuilder.Infrastructure.Configuration.WebAccessMode.LocalOwner=>"Local Owner",LoperFamilyTreeBuilder.Infrastructure.Configuration.WebAccessMode.FamilyPortal=>"Family Portal",LoperFamilyTreeBuilder.Infrastructure.Configuration.WebAccessMode.PublicReadOnly=>"Public Read-Only",_=>WebOptions.AccessMode.ToString()};
+}
