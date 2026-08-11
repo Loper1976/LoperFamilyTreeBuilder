@@ -1,0 +1,30 @@
+@page "/gedcom-validation"
+@rendermode InteractiveServer
+@inject GedcomImportService ImportService
+
+<PageTitle>GEDCOM Validation - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header"><div><div class="page-eyebrow">Read-only File Check</div><h1>GEDCOM Validation</h1><p>Inspect a GEDCOM without creating a staging session, backup, or genealogy changes.</p></div><a class="secondary-action inline-link-button" href="/gedcom-import">GEDCOM Import</a></div>
+<section class="page-card">
+    <InputFile OnChange="ValidateAsync" accept=".ged,.gedcom,text/plain" />
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+    @if (_report is not null)
+    {
+        <div class="summary-grid" style="margin-top:18px"><div class="summary-card"><div class="summary-value">@_report.IndividualCount</div><div class="summary-label">Individuals</div></div><div class="summary-card"><div class="summary-value">@_report.FamilyCount</div><div class="summary-label">Families</div></div><div class="summary-card"><div class="summary-value">@_report.SourceCount</div><div class="summary-label">Sources</div></div><div class="summary-card"><div class="summary-value">@_report.LineCount</div><div class="summary-label">Lines</div></div></div>
+        <h2>@(_report.IsValid ? "Validation passed" : "Validation failed")</h2>
+        <p>Custom Ancestry and vendor-specific tags are retained as review items rather than silently discarded. Exact day-month-year dates are parsed; partial/approximate date text remains review-only.</p>
+        @if (_report.Errors.Count > 0) { <h3>Errors</h3><ul>@foreach (var error in _report.Errors) { <li>@error</li> }</ul> }
+        @if (_report.Warnings.Count > 0) { <h3>Warnings</h3><ul>@foreach (var warning in _report.Warnings) { <li>@warning</li> }</ul> }
+        @if (_report.UnsupportedTags.Count > 0) { <h3>Custom / unsupported tags</h3><div class="table-scroll"><table class="people-table"><tbody>@foreach (var tag in _report.UnsupportedTags.Take(500)) { <tr><td>@tag</td></tr> }</tbody></table></div> }
+    }
+</section>
+
+@code {
+    private GedcomValidationReport? _report; private string _error = string.Empty; private const long MaxFileSize = 75L * 1024L * 1024L;
+    private async Task ValidateAsync(InputFileChangeEventArgs e)
+    {
+        _error = string.Empty; _report = null;
+        try { var file = e.File; if (file.Size > MaxFileSize) throw new InvalidOperationException("GEDCOM files larger than 75 MB are not accepted by this validation screen."); await using var input = file.OpenReadStream(MaxFileSize); using var memory = new MemoryStream(); await input.CopyToAsync(memory); _report = ImportService.Validate(file.Name, memory.ToArray()); }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+}
