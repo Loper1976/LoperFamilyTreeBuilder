@@ -1,0 +1,41 @@
+@page "/family/{Slug}"
+@attribute [AllowAnonymous]
+@layout PublicLayout
+@rendermode InteractiveServer
+@inject PublicProfileService Profiles
+
+<PageTitle>@(_profile is null ? "Family Profile" : _profile.DisplayName) - Loper Family Archive</PageTitle>
+
+@if (_loading)
+{
+    <div class="public-empty public-loading-state"><strong>Loading family profile</strong><span>Applying public privacy rules.</span></div>
+}
+else if (_profile is null)
+{
+    <section class="public-not-found"><div class="page-eyebrow">LOPER FAMILY ARCHIVE</div><h1>Profile not available</h1><p>This profile does not exist or has not been approved for public viewing.</p><a class="primary-action inline-link-button" href="/family">Return to Family Directory</a></section>
+}
+else
+{
+    <article class="public-profile public-profile-120">
+        <div class="public-breadcrumb"><a href="/family">Family Directory</a><span>›</span><span>@_profile.DisplayName</span></div>
+        <header class="public-profile-header public-profile-header-120">
+            <div class="public-profile-photo-wrap">@if (_profile.Photos.Count > 0){<img class="public-profile-primary-photo" src="@($"/public/media/{_profile.Photos[0].MediaFileId}")" alt="" />}else{<div class="public-profile-photo-placeholder">@Initials(_profile.DisplayName)</div>}</div>
+            <div class="public-profile-heading"><div class="page-eyebrow">FAMILY PROFILE</div><h1>@_profile.DisplayName</h1>@if(!string.IsNullOrWhiteSpace(_profile.Headline)){<p class="public-profile-headline">@_profile.Headline</p>}<div class="public-profile-facts">@if(!string.IsNullOrWhiteSpace(_profile.BirthDisplay)){<span>Born @_profile.BirthDisplay</span>}@if(!string.IsNullOrWhiteSpace(_profile.DeathDisplay)){<span>Died @_profile.DeathDisplay</span>}@if(!string.IsNullOrWhiteSpace(_profile.LegacyNumber)){<span>Legacy @_profile.LegacyNumber</span>}</div></div>
+        </header>
+
+        @if (!string.IsNullOrWhiteSpace(_profile.Biography)){<section class="public-profile-section public-biography-section"><div class="public-section-label">Life Story</div><h2>Biography</h2><p class="public-biography">@_profile.Biography</p></section>}
+        @if (_profile.Photos.Count > 0){<section class="public-profile-section"><div class="public-section-label">Family Images</div><h2>Photographs</h2><div class="public-photo-grid public-photo-grid-120">@foreach(var photo in _profile.Photos){<figure><img src="@($"/public/media/{photo.MediaFileId}")" alt="@photo.Title" loading="lazy" /><figcaption><strong>@photo.Title</strong><span>@string.Join(" · ",new[]{photo.CaptureDateTime?.ToString("yyyy"),photo.PlaceName}.Where(x=>!string.IsNullOrWhiteSpace(x)))</span></figcaption></figure>}</div></section>}
+        @if (_profile.Timeline.Count > 0){<section class="public-profile-section"><div class="public-section-label">Chronology</div><h2>Life Timeline</h2><div class="public-timeline public-timeline-120">@foreach(var item in _profile.Timeline){<div><time>@item.DateDisplay</time><article><strong>@item.Title</strong><span>@item.EventType @if(!string.IsNullOrWhiteSpace(item.PlaceName)){<text> · @item.PlaceName</text>}</span>@if(!string.IsNullOrWhiteSpace(item.Description)){<p>@item.Description</p>}</article></div>}</div></section>}
+        @if (_profile.Cemeteries.Count > 0){<section class="public-profile-section"><div class="public-section-label">Final Resting Place</div><h2>Cemetery &amp; Burial</h2><div class="public-record-grid">@foreach(var item in _profile.Cemeteries){<div class="public-record-card"><strong>@item.CemeteryName</strong><span>@item.Location</span><span>@item.PlotDescription</span>@if(!string.IsNullOrWhiteSpace(item.MarkerInscription)){<p>@item.MarkerInscription</p>}</div>}</div></section>}
+        @if (_profile.Military.Count > 0){<section class="public-profile-section"><div class="public-section-label">Service</div><h2>Military History</h2><div class="public-record-grid">@foreach(var item in _profile.Military){<div class="public-record-card"><strong>@item.Branch @if(!string.IsNullOrWhiteSpace(item.RankRating)){<text> · @item.RankRating</text>}</strong><span>@item.ServiceDates</span><span>@item.Specialty</span><p>@item.UnitsShipsDutyStations</p><p>@item.WarsCampaignsDeployments</p><p>@item.AwardsQualifications</p></div>}</div></section>}
+        @if (_profile.Stories.Count > 0){<section class="public-profile-section"><div class="public-section-label">Family Voices</div><h2>Stories &amp; Memories</h2><div class="public-story-grid">@foreach(var story in _profile.Stories){<article class="public-story"><h3>@story.Title</h3><p>@story.PublicationText</p><small>Contributed by @story.Contributor@if(story.RecordedDate.HasValue){<text> · @story.RecordedDate.Value.ToString("MMMM yyyy")</text>}</small></article>}</div></section>}
+        @if (_profile.Documents.Count > 0){<section class="public-profile-section"><div class="public-section-label">Evidence</div><h2>Public Documents</h2><div class="public-document-list">@foreach(var doc in _profile.Documents){<a href="@($"/public/media/{doc.MediaFileId}")" target="_blank"><strong>@doc.Title</strong><span>@doc.PlaceName</span><small>Open document ↗</small></a>}</div></section>}
+        <div class="public-profile-bottom"><a href="/family">← Back to Family Directory</a><span>Public view generated from approved archive records.</span></div>
+    </article>
+}
+
+@code {
+    [Parameter] public string Slug { get; set; }=string.Empty; private PublicProfileView? _profile; private bool _loading=true;
+    protected override async Task OnParametersSetAsync(){_loading=true;try{_profile=await Profiles.GetPublicProfileAsync(Slug);}finally{_loading=false;}}
+    private static string Initials(string name)=>string.Concat(name.Split(' ',StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x=>char.ToUpperInvariant(x[0])));
+}
