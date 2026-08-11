@@ -1,0 +1,140 @@
+@page "/gedcom-import"
+@rendermode InteractiveServer
+@inject GedcomImportService ImportService
+@inject NavigationManager Navigation
+
+<PageTitle>GEDCOM Import & Dry Run - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header">
+    <div>
+        <div class="page-eyebrow">Controlled Data Intake</div>
+        <h1>GEDCOM Import &amp; Dry Run</h1>
+        <p>Analyze an Ancestry or other GEDCOM before anything is staged. The dry run writes nothing to the genealogy database.</p>
+    </div>
+    <div class="page-header-actions"><a class="secondary-action inline-link-button" href="/gedcom-validation">Validation</a><a class="secondary-action inline-link-button" href="/import-review">Import History</a></div>
+</div>
+
+<section class="page-card gedcom-intake-card">
+    <div class="gedcom-step-header"><span>1</span><div><h2>Select GEDCOM</h2><p>The original file is not stored until you explicitly create a staging session.</p></div></div>
+    <InputFile OnChange="SelectFileAsync" accept=".ged,.gedcom,text/plain" />
+    @if (_fileName.Length > 0)
+    {
+        <div class="import-file-summary"><strong>@_fileName</strong><span>@FormatBytes(_fileSize)</span></div>
+    }
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+    <div class="form-actions gedcom-primary-actions">
+        <button class="primary-action" disabled="@(_content.Length == 0 || _busy)" @onclick="AnalyzeAsync">@(_busy ? "Analyzing..." : "Analyze Only - No Changes")</button>
+        <button class="secondary-action" disabled="@(_dryRun?.CanStage != true || _busy)" @onclick="StageAsync">Create Staging Session</button>
+    </div>
+</section>
+
+@if (_dryRun is not null)
+{
+    <section class="page-card gedcom-dryrun-card">
+        <div class="gedcom-step-header"><span>2</span><div><h2>Dry Run Results</h2><p>This analysis has not changed or stored genealogy records.</p></div></div>
+        <div class="summary-grid gedcom-summary-grid">
+            <div class="summary-card"><div class="summary-value">@_dryRun.IndividualCount.ToString("N0")</div><div class="summary-label">People</div></div>
+            <div class="summary-card"><div class="summary-value">@_dryRun.FamilyCount.ToString("N0")</div><div class="summary-label">Families</div></div>
+            <div class="summary-card"><div class="summary-value">@_dryRun.SourceCount.ToString("N0")</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_dryRun.DuplicateCandidateCount.ToString("N0")</div><div class="summary-label">Possible Duplicates</div></div>
+            <div class="summary-card @( _dryRun.LegacyNumberConflictCount > 0 ? "summary-card-warning" : "")"><div class="summary-value">@_dryRun.LegacyNumberConflictCount.ToString("N0")</div><div class="summary-label">Legacy # Conflicts</div></div>
+            <div class="summary-card"><div class="summary-value">@_dryRun.UnsupportedTagCount.ToString("N0")</div><div class="summary-label">Custom / Unsupported Tags</div></div>
+        </div>
+
+        <div class="gedcom-quality-grid">
+            <div><strong>@_dryRun.Quality.MissingBirthDateCount.ToString("N0")</strong><span>Missing exact birth dates</span></div>
+            <div><strong>@_dryRun.Quality.MissingDeathDateCount.ToString("N0")</strong><span>Missing exact death dates</span></div>
+            <div><strong>@_dryRun.Quality.MissingParentLinkCount.ToString("N0")</strong><span>No parent-family link</span></div>
+            <div><strong>@_dryRun.Quality.MissingSourceCount.ToString("N0")</strong><span>No source reference</span></div>
+            <div><strong>@_dryRun.Quality.NoteCount.ToString("N0")</strong><span>Notes preserved for staging</span></div>
+            <div><strong>@_dryRun.Quality.PlaceVariantGroupCount.ToString("N0")</strong><span>Possible place variants</span></div>
+        </div>
+
+        @if (_dryRun.LegacyNumberConflictCount > 0)
+        {
+            <div class="alert alert-warning"><strong>Legacy Number protection:</strong> conflicting incoming values will not overwrite protected Robert J. Loper Legacy Numbers. Those records remain manual-review items and are excluded from automatic creation.</div>
+        }
+        @if (!_dryRun.IsValid)
+        {
+            <div class="alert alert-error">Validation errors were found. Staging is blocked until those errors are corrected.</div>
+        }
+
+        <div class="section-heading-row"><div><h2>Highest-priority review items</h2><p>Up to 250 issues are shown in the dry run. The full staged review keeps the complete issue list.</p></div></div>
+        @if (_dryRun.Issues.Count == 0)
+        {
+            <div class="empty-state compact-empty-state"><strong>No import issues detected.</strong><span>You can create a staging session for deeper review.</span></div>
+        }
+        else
+        {
+            <div class="table-scroll"><table class="people-table gedcom-issue-table"><thead><tr><th>Type</th><th>Record</th><th>Message</th><th>Details</th></tr></thead><tbody>
+            @foreach (var issue in _dryRun.Issues)
+            {
+                <tr class="@(issue.IssueType == GedcomImportIssueType.LegacyNumberConflict ? "legacy-conflict-row" : "")"><td>@Format(issue.IssueType)</td><td><code>@issue.RecordPointer</code></td><td>@issue.Message</td><td>@issue.Details</td></tr>
+            }
+            </tbody></table></div>
+        }
+
+        <div class="form-actions"><button class="primary-action" disabled="@(!_dryRun.CanStage || _busy)" @onclick="StageAsync">Stage This GEDCOM for Review</button></div>
+    </section>
+}
+
+<section class="page-card gedcom-safeguards-card">
+    <div class="gedcom-step-header"><span>3</span><div><h2>Import safeguards</h2><p>These rules are enforced by the import service, not just by the page.</p></div></div>
+    <div class="gedcom-safeguard-grid">
+        <div><strong>Dry run first</strong><span>No genealogy writes and no staging-file storage.</span></div>
+        <div><strong>Original preserved</strong><span>The staged GEDCOM is stored with a SHA-256 checksum.</span></div>
+        <div><strong>Legacy Numbers protected</strong><span>No normalization, renumbering, replacement or silent conflict resolution.</span></div>
+        <div><strong>Pre-import backup</strong><span>A SQL backup is created immediately before an approved apply.</span></div>
+        <div><strong>Transactional apply</strong><span>A failed database apply rolls back automatically.</span></div>
+        <div><strong>Controlled rollback</strong><span>Records created by a session can be removed if they have not been independently edited or linked.</span></div>
+    </div>
+</section>
+
+@code {
+    private string _fileName = string.Empty;
+    private long _fileSize;
+    private byte[] _content = [];
+    private GedcomDryRunReport? _dryRun;
+    private bool _busy;
+    private string _error = string.Empty;
+    private const long MaxFileSize = 75L * 1024L * 1024L;
+
+    private async Task SelectFileAsync(InputFileChangeEventArgs e)
+    {
+        _error = string.Empty; _dryRun = null; _content = [];
+        var file = e.File; _fileName = file.Name; _fileSize = file.Size;
+        try
+        {
+            if (file.Size > MaxFileSize) throw new InvalidOperationException("GEDCOM files larger than 75 MB are not accepted by this import screen.");
+            await using var input = file.OpenReadStream(MaxFileSize);
+            using var memory = new MemoryStream();
+            await input.CopyToAsync(memory); _content = memory.ToArray();
+        }
+        catch (Exception ex) { _error = ex.Message; _content = []; }
+    }
+
+    private async Task AnalyzeAsync()
+    {
+        if (_content.Length == 0) return;
+        _busy = true; _error = string.Empty;
+        try { _dryRun = await ImportService.AnalyzeAsync(new GedcomPreviewRequest { OriginalFileName = _fileName, Content = _content }); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task StageAsync()
+    {
+        if (_content.Length == 0 || _dryRun?.CanStage != true) return;
+        _busy = true; _error = string.Empty;
+        try
+        {
+            var sessionId = await ImportService.CreatePreviewAsync(new GedcomPreviewRequest { OriginalFileName = _fileName, Content = _content }, "Local Application");
+            Navigation.NavigateTo($"/import-review/{sessionId}");
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private static string FormatBytes(long bytes) => bytes switch { >= 1024L * 1024L => $"{bytes / (1024d * 1024d):N1} MB", >= 1024L => $"{bytes / 1024d:N1} KB", _ => $"{bytes:N0} bytes" };
+    private static string Format(Enum value) => string.Concat(value.ToString().Select((c, i) => i > 0 && char.IsUpper(c) ? " " + c : c.ToString()));
+}
