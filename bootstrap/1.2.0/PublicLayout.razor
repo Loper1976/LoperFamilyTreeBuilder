@@ -1,0 +1,15 @@
+@inherits LayoutComponentBase
+@inject LoperFamilyTreeBuilder.Infrastructure.Configuration.WebExperienceOptions WebOptions
+
+<div class="public-site-shell public-site-shell-120">
+    @if (!WebOptions.HostedMode)
+    {
+        <div class="public-preview-banner"><strong>Local Public Preview</strong><span>This preview is running only on this computer. Nothing is being published to loper.family.</span></div>
+    }
+    <header class="public-site-header public-site-header-120">
+        <a class="public-brand" href="/family"><img src="/images/loper-logo.jpg" alt="Loper Family" /><span><strong>Loper Family Archive</strong><small>History preserved for future generations</small></span></a>
+        <nav aria-label="Family archive navigation"><a href="/family">Family Directory</a><a href="/login">Family Sign In</a></nav>
+    </header>
+    <main class="public-site-main public-site-main-120">@Body</main>
+    <footer class="public-site-footer"><div><strong>Loper Family Archive</strong><span>Preserve the original work. Improve around it. Never replace it.</span></div><small>Only records intentionally approved for public viewing appear in this experience.</small></footer>
+</div>
