@@ -16,6 +16,7 @@ Copy-BootstrapFile 'PublicLayout.razor' 'src/LoperFamilyTreeBuilder.Web/Componen
 Copy-BootstrapFile 'PublicDirectory.razor' 'src/LoperFamilyTreeBuilder.Web/Components/Pages/PublicDirectory.razor'
 Copy-BootstrapFile 'PublicPersonProfile.razor' 'src/LoperFamilyTreeBuilder.Web/Components/Pages/PublicPersonProfile.razor'
 Copy-BootstrapFile 'PublicPreview.razor' 'src/LoperFamilyTreeBuilder.Web/Components/Pages/PublicPreview.razor'
+Copy-BootstrapFile 'ProductionRelease.razor' 'src/LoperFamilyTreeBuilder.Web/Components/Pages/ProductionRelease.razor'
 Copy-BootstrapFile 'FamilyWebPreviewTests.cs' 'tests/LoperFamilyTreeBuilder.Tests/FamilyWebPreviewTests.cs'
 
 $cssPath=Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/wwwroot/app.css'
@@ -38,15 +39,6 @@ $old='<div class="page-header modern-page-header"><div><div class="page-eyebrow"
 $new='<div class="page-header modern-page-header"><div><div class="page-eyebrow">Web Publishing</div><h1>Public / Private Profiles</h1><p>Explicitly control which reviewed person profiles can appear in the family-facing preview. Private records remain private by default.</p></div><div class="page-header-actions"><a class="secondary-action inline-link-button" href="/public-preview">Preview Center</a><a class="primary-action inline-link-button" href="/family" target="_blank">Open Public View</a></div></div>'
 $profiles=$profiles.Replace($old,$new)
 Set-Content $profilesPath $profiles -Encoding utf8
-
-$productionPath=Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/Components/Pages/ProductionRelease.razor'
-$production=Get-Content $productionPath -Raw
-$production=$production.Replace('Final local archive, recovery, hosted-deployment, and release checks for version 1.1.0.','Final local archive, recovery, hosted-deployment, and release checks for version 1.2.0.')
-$production=$production.Replace('<div class="summary-value">1.1.0</div>','<div class="summary-value">1.2.0</div>')
-if($production-notmatch 'Owner approval is still required before any deployment'){
-    $production=$production.Replace('<section class="page-card">'+"`r`n        "+'<h2>Windows Installer Signing</h2>','<div class="alert alert-warning"><strong>Deployment gate:</strong> Owner approval is still required before any deployment or publication to loper.family. This release does not deploy the application.</div>'+"`r`n`r`n    "+'<section class="page-card">'+"`r`n        "+'<h2>Windows Installer Signing</h2>')
-}
-Set-Content $productionPath $production -Encoding utf8
 
 $propsPath=Join-Path $Root 'Directory.Build.props'
 $props=Get-Content $propsPath -Raw
