@@ -1,0 +1,79 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell web-app-shell">
+    <aside class="sidebar desktop-sidebar" aria-label="Primary navigation">
+        <div class="brand">
+            <img class="brand-logo" src="/images/loper-logo.jpg" alt="" />
+            <div class="brand-copy">
+                <div class="brand-title">Loper Family Tree</div>
+                <div class="brand-subtitle">Builder</div>
+            </div>
+        </div>
+        <NavMenu />
+    </aside>
+
+    <main class="main-workspace">
+        <header class="topbar web-topbar">
+            <div class="topbar-primary">
+                <details class="mobile-nav-menu">
+                    <summary aria-label="Open navigation menu">
+                        <span class="mobile-nav-icon" aria-hidden="true">☰</span>
+                        <span>Menu</span>
+                    </summary>
+                    <div class="mobile-nav-panel">
+                        <div class="mobile-brand-row">
+                            <img class="brand-logo compact" src="/images/loper-logo.jpg" alt="" />
+                            <div>
+                                <div class="brand-title">Loper Family Tree</div>
+                                <div class="brand-subtitle">Builder</div>
+                            </div>
+                        </div>
+                        <NavMenu />
+                    </div>
+                </details>
+
+                <div class="workspace-title-block product-title-block">
+                    <strong>Loper Family Tree Builder</strong>
+                    <span>Private genealogy, evidence and family archive</span>
+                </div>
+            </div>
+
+            <div class="topbar-account">
+                <AuthorizeView>
+                    <Authorized Context="auth">
+                        <span class="topbar-user">@auth.User.Identity?.Name</span>
+                        <form method="post" action="/account/logout">
+                            <button class="topbar-link" type="submit">Sign out</button>
+                        </form>
+                    </Authorized>
+                    <NotAuthorized>
+                        <span class="topbar-status">Local archive</span>
+                        <a class="topbar-link" href="/login">Sign in</a>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
+        </header>
+
+        <section class="content web-content">
+            <ErrorBoundary>
+                <ChildContent>
+                    @Body
+                </ChildContent>
+                <ErrorContent Context="exception">
+                    <section class="page-card error-state-card global-error-card" role="alert">
+                        <div class="error-state-icon" aria-hidden="true">!</div>
+                        <div>
+                            <div class="page-eyebrow">Application Error</div>
+                            <h1>We couldn't open this page</h1>
+                            <p>An unexpected problem occurred. Your genealogy records were not intentionally changed by this error.</p>
+                            <div class="error-actions">
+                                <a class="primary-action inline-link-button" href="/">Return to Dashboard</a>
+                                <a class="secondary-action inline-link-button" href="/system-health">Open System Health</a>
+                            </div>
+                        </div>
+                    </section>
+                </ErrorContent>
+            </ErrorBoundary>
+        </section>
+    </main>
+</div>
