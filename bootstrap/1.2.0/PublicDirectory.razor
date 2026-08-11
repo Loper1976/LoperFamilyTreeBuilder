@@ -1,0 +1,47 @@
+@page "/family"
+@attribute [AllowAnonymous]
+@layout PublicLayout
+@rendermode InteractiveServer
+@inject PublicProfileService Profiles
+
+<PageTitle>Loper Family Archive</PageTitle>
+
+<section class="public-hero public-hero-120">
+    <div class="public-hero-copy"><div class="page-eyebrow">LOPER.FAMILY PREVIEW</div><h1>Our Family Archive</h1><p>Explore reviewed family profiles, photographs, stories, military history, cemetery records and other material that has been intentionally approved for public viewing.</p><div class="public-trust-row"><span>Reviewed profiles only</span><span>Living-person protections</span><span>Private records stay private</span></div></div>
+</section>
+
+<section class="public-directory-toolbar">
+    <div><label for="public-family-search">Find a family member</label><div class="public-search-panel public-search-panel-120"><input id="public-family-search" @bind="_search" @bind:event="oninput" @onkeydown="HandleKeyDown" placeholder="Search by name" /><button class="primary-action" @onclick="SearchAsync">Search</button></div></div>
+    <div class="public-directory-count"><strong>@_items.Count</strong><span>published profile@(_items.Count == 1 ? "" : "s")</span></div>
+</section>
+
+@if (_loading)
+{
+    <div class="public-empty public-loading-state"><strong>Loading the family archive</strong><span>Checking profiles approved for public viewing.</span></div>
+}
+else if (_items.Count == 0)
+{
+    <div class="public-empty"><strong>No published profiles found.</strong><span>Only profiles deliberately approved for public viewing appear here.</span></div>
+}
+else
+{
+    <section class="public-directory-grid public-directory-grid-120">
+        @foreach (var item in _items)
+        {
+            <a class="public-directory-card public-directory-card-120" href="@($"/family/{item.Slug}")">
+                <div class="public-directory-photo">@if (item.PrimaryPhotoMediaId.HasValue) { <img src="@($"/public/media/{item.PrimaryPhotoMediaId}")" alt="" loading="lazy" /> } else { <span>@Initials(item.DisplayName)</span> }</div>
+                <div class="public-directory-card-copy"><div class="public-life-years">@item.LifeYears</div><h2>@item.DisplayName</h2>@if(!string.IsNullOrWhiteSpace(item.Headline)){<p>@item.Headline</p>}<span class="public-profile-link">View family profile →</span></div>
+            </a>
+        }
+    </section>
+}
+
+<section class="public-archive-note"><strong>About this archive</strong><p>The public family experience is generated from the private Loper Family Tree Builder archive. Publication is deliberate and controlled. Private, restricted, medical and living-person information is not automatically exposed.</p></section>
+
+@code {
+    private string _search = string.Empty; private bool _loading = true; private IReadOnlyList<PublicDirectoryItem> _items = [];
+    protected override async Task OnInitializedAsync() => await SearchAsync();
+    private async Task SearchAsync(){_loading=true;try{_items=await Profiles.GetDirectoryAsync(_search);}finally{_loading=false;}}
+    private async Task HandleKeyDown(KeyboardEventArgs e){if(e.Key=="Enter")await SearchAsync();}
+    private static string Initials(string name)=>string.Concat(name.Split(' ',StringSplitOptions.RemoveEmptyEntries).Take(2).Select(x=>char.ToUpperInvariant(x[0])));
+}
