@@ -1,0 +1,46 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell hud-shell">
+    <aside class="sidebar hud-sidebar">
+        <div class="brand hud-brand">
+            <div class="brand-mark" aria-hidden="true">
+                <span>L</span>
+            </div>
+            <div class="brand-copy">
+                <div class="brand-kicker">LOPER ARCHIVE</div>
+                <div class="brand-title">Family Tree Builder</div>
+                <div class="brand-subtitle">Genealogy Command Center</div>
+            </div>
+        </div>
+
+        <div class="sidebar-signal">
+            <span class="signal-dot"></span>
+            <span>LOCAL ARCHIVE ONLINE</span>
+        </div>
+
+        <NavMenu />
+
+        <div class="sidebar-footer">
+            <div class="sidebar-footer-label">ARCHIVE MODE</div>
+            <strong>Private / Local</strong>
+            <span>Legacy data protected</span>
+        </div>
+    </aside>
+
+    <main class="main-workspace">
+        <header class="topbar hud-topbar">
+            <div class="topbar-command">
+                <span class="topbar-eyebrow">GENEALOGY COMMAND CENTER</span>
+                <strong>Family Archive Work Center</strong>
+            </div>
+            <div class="topbar-indicators" aria-label="System status">
+                <span class="hud-status-pill"><i></i> LOCAL</span>
+                <span class="hud-status-pill hud-status-protected">LEGACY LOCK</span>
+            </div>
+        </header>
+
+        <section class="content hud-content">
+            @Body
+        </section>
+    </main>
+</div>

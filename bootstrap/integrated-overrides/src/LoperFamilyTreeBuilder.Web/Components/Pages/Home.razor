@@ -1,0 +1,227 @@
+@page "/"
+@rendermode InteractiveServer
+@inject DashboardQueryService DashboardQuery
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - Loper Family Tree Builder</PageTitle>
+
+<section class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">ARCHIVE OVERVIEW // LIVE LOCAL DATA</div>
+        <h1>Family Intelligence Dashboard</h1>
+        <p>Research status, archive health, protected genealogy data, and the next work requiring attention.</p>
+    </div>
+    <button class="primary-action hud-primary-action" @onclick="CreatePerson">
+        <span>+</span> Add Person
+    </button>
+</section>
+
+<div class="hud-command-search">
+    <div class="hud-search-icon" aria-hidden="true">⌕</div>
+    <div class="hud-search-field">
+        <label for="globalSearch">COMMAND SEARCH</label>
+        <input id="globalSearch"
+               @bind="_search"
+               @bind:event="oninput"
+               @onkeydown="HandleSearchKey"
+               placeholder="Search name, Legacy Number, internal ID, place, source, or keyword" />
+    </div>
+    <button class="secondary-action hud-search-button" @onclick="SearchPeople">SEARCH ARCHIVE</button>
+</div>
+
+@if (_loading)
+{
+    <div class="page-card hud-panel hud-loading-panel">
+        <span class="hud-loader"></span>
+        Reading archive telemetry...
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error hud-alert">
+        <strong>Dashboard data unavailable.</strong>
+        <span>@_error</span>
+    </div>
+}
+else
+{
+    <div class="summary-grid hud-summary-grid">
+        @foreach (var item in SummaryItems)
+        {
+            <article class="summary-card hud-stat-card">
+                <div class="hud-stat-topline">
+                    <span>@item.Code</span>
+                    <i></i>
+                </div>
+                <div class="summary-value">@item.Value</div>
+                <div class="summary-label">@item.Label</div>
+            </article>
+        }
+    </div>
+}
+
+<div class="hud-dashboard-grid">
+    <section class="page-card hud-panel hud-panel-featured">
+        <div class="hud-panel-header">
+            <div>
+                <div class="hud-eyebrow">MISSION CONTROL</div>
+                <h2>Research Operations</h2>
+            </div>
+            <span class="hud-panel-code">OPS-01</span>
+        </div>
+
+        <div class="hud-action-grid">
+            <a href="/people">
+                <strong>Find a Person</strong>
+                <span>Search the complete people index</span>
+            </a>
+            <a href="/tree-integrity">
+                <strong>Tree Integrity</strong>
+                <span>Review genealogy conflicts and warnings</span>
+            </a>
+            <a href="/gedcom-import">
+                <strong>GEDCOM Intake</strong>
+                <span>Stage imported genealogy for review</span>
+            </a>
+            <a href="/documents">
+                <strong>Archive Documents</strong>
+                <span>Records, citations, scans, and provenance</span>
+            </a>
+            <a href="/medical">
+                <strong>Family Health</strong>
+                <span>Permission-controlled health history</span>
+            </a>
+            <a href="/reports">
+                <strong>Reports Center</strong>
+                <span>Family, evidence, and research outputs</span>
+            </a>
+        </div>
+    </section>
+
+    <section class="page-card hud-panel">
+        <div class="hud-panel-header">
+            <div>
+                <div class="hud-eyebrow">SYSTEM WATCH</div>
+                <h2>Archive Safeguards</h2>
+            </div>
+            <span class="hud-panel-code">SAFE</span>
+        </div>
+
+        <div class="hud-watch-list">
+            <a class="hud-watch-row" href="/tree-integrity">
+                <span class="hud-watch-signal signal-ready"></span>
+                <div>
+                    <strong>Tree Integrity Checker</strong>
+                    <small>Review-only validation active</small>
+                </div>
+                <b>ONLINE</b>
+            </a>
+            <div class="hud-watch-row">
+                <span class="hud-watch-signal signal-locked"></span>
+                <div>
+                    <strong>Legacy Number Protection</strong>
+                    <small>Robert J. Loper historical values</small>
+                </div>
+                <b>LOCKED</b>
+            </div>
+            <div class="hud-watch-row">
+                <span class="hud-watch-signal signal-ready"></span>
+                <div>
+                    <strong>Archive Storage</strong>
+                    <small>Private local data mode</small>
+                </div>
+                <b>LOCAL</b>
+            </div>
+        </div>
+    </section>
+</div>
+
+<section class="page-card hud-panel hud-queue-panel">
+    <div class="hud-panel-header">
+        <div>
+            <div class="hud-eyebrow">REVIEW QUEUES</div>
+            <h2>Work Requiring Attention</h2>
+        </div>
+        <span class="hud-panel-code">QUEUE</span>
+    </div>
+    <div class="hud-queue-grid">
+        @foreach (var queue in Queues)
+        {
+            <div class="hud-queue-item">
+                <span>@queue</span>
+                <strong>0</strong>
+            </div>
+        }
+    </div>
+</section>
+
+@code {
+    private DashboardSummary? _summary;
+    private bool _loading = true;
+    private string _search = string.Empty;
+    private string? _error;
+
+    private IEnumerable<(string Code, string Label, string Value)> SummaryItems
+    {
+        get
+        {
+            var summary = _summary ?? new DashboardSummary(
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+            return
+            [
+                ("PPL", "People", summary.People.ToString("N0")),
+                ("BRN", "Family Branches", summary.FamilyBranches.ToString("N0")),
+                ("LIV", "Living", summary.Living.ToString("N0")),
+                ("DEC", "Deceased", summary.Deceased.ToString("N0")),
+                ("DOC", "Documents", summary.Documents.ToString("N0")),
+                ("SRC", "Sources", summary.Sources.ToString("N0")),
+                ("MED", "Health Records", summary.MedicalRecords.ToString("N0")),
+                ("REV", "Pending Reviews", summary.PendingReviews.ToString("N0"))
+            ];
+        }
+    }
+
+    private readonly string[] Queues =
+    [
+        "Needs research",
+        "Needs source",
+        "Needs photo",
+        "Duplicate review",
+        "GEDCOM import review",
+        "Medical review",
+        "Family submissions",
+        "AI suggestions"
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _summary = await DashboardQuery.GetSummaryAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void CreatePerson() => Navigation.NavigateTo("/people/add");
+
+    private void SearchPeople()
+    {
+        Navigation.NavigateTo("/people");
+    }
+
+    private void HandleSearchKey(KeyboardEventArgs args)
+    {
+        if (args.Key == "Enter")
+        {
+            SearchPeople();
+        }
+    }
+}
