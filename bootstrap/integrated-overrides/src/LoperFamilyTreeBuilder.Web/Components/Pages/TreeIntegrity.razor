@@ -1,0 +1,172 @@
+@page "/tree-integrity"
+@rendermode InteractiveServer
+@using LoperFamilyTreeBuilder.Core.Validation
+@inject TreeIntegrityQueryService IntegrityQuery
+
+<PageTitle>Tree Integrity - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Tree Integrity</h1>
+        <p>Read-only genealogy validation. Findings are flagged for review and historical data is never changed automatically.</p>
+    </div>
+    <button class="primary-action"
+            disabled="@_loading"
+            @onclick="RunCheckAsync">
+        @(_loading ? "Checking..." : "Run Integrity Check")
+    </button>
+</div>
+
+<div class="page-card" style="margin-bottom: 18px;">
+    <strong>Proposal-first safety:</strong>
+    This checker only identifies possible conflicts. It does not renumber people, normalize Robert J. Loper Legacy Numbers, delete relationships, merge people, or alter dates.
+</div>
+
+@if (_loading)
+{
+    <div class="page-card">Scanning people, dates, and parent-child relationships...</div>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="page-card">
+        <h2>Integrity check could not complete</h2>
+        <p>@_error</p>
+    </div>
+}
+else
+{
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-value">@ErrorCount</div>
+            <div class="summary-label">Errors</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">@WarningCount</div>
+            <div class="summary-label">Warnings</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">@InformationCount</div>
+            <div class="summary-label">Review Items</div>
+        </div>
+        <div class="summary-card">
+            <div class="summary-value">@_issues.Count</div>
+            <div class="summary-label">Total Findings</div>
+        </div>
+    </div>
+
+    @if (_issues.Count == 0)
+    {
+        <div class="page-card">
+            <h2>No integrity findings</h2>
+            <p>The currently supported checks did not find conflicts in the loaded people and parent-child relationship data.</p>
+        </div>
+    }
+    else
+    {
+        <div class="page-card people-table-card">
+            <div class="table-toolbar">
+                <strong>Review Queue</strong>
+                <span>@_issues.Count finding(s)</span>
+            </div>
+            <div class="table-scroll">
+                <table class="people-table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Rule</th>
+                            <th>Finding</th>
+                            <th>Primary Person</th>
+                            <th>Related Person</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var issue in _issues)
+                        {
+                            <tr>
+                                <td><strong>@issue.Severity</strong></td>
+                                <td>@FormatCode(issue.Code)</td>
+                                <td>@issue.Message</td>
+                                <td>
+                                    <a href="@($"/people/{issue.PrimaryPersonId}")">
+                                        @ShortId(issue.PrimaryPersonId)
+                                    </a>
+                                </td>
+                                <td>
+                                    @if (issue.RelatedPersonId.HasValue)
+                                    {
+                                        <a href="@($"/people/{issue.RelatedPersonId.Value}")">
+                                            @ShortId(issue.RelatedPersonId.Value)
+                                        </a>
+                                    }
+                                    else
+                                    {
+                                        <span>-</span>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private IReadOnlyList<TreeIntegrityIssue> _issues = Array.Empty<TreeIntegrityIssue>();
+    private bool _loading = true;
+    private string? _error;
+
+    private int ErrorCount =>
+        _issues.Count(issue => issue.Severity == TreeIntegrityIssueSeverity.Error);
+
+    private int WarningCount =>
+        _issues.Count(issue => issue.Severity == TreeIntegrityIssueSeverity.Warning);
+
+    private int InformationCount =>
+        _issues.Count(issue => issue.Severity == TreeIntegrityIssueSeverity.Information);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RunCheckAsync();
+    }
+
+    private async Task RunCheckAsync()
+    {
+        _loading = true;
+        _error = null;
+
+        try
+        {
+            _issues = await IntegrityQuery.CheckAsync();
+        }
+        catch (Exception ex)
+        {
+            _issues = Array.Empty<TreeIntegrityIssue>();
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string ShortId(Guid id) =>
+        id.ToString("N")[..8];
+
+    private static string FormatCode(TreeIntegrityIssueCode code) =>
+        code switch
+        {
+            TreeIntegrityIssueCode.DeathBeforeBirth => "Death before birth",
+            TreeIntegrityIssueCode.MissingPersonReference => "Missing person reference",
+            TreeIntegrityIssueCode.SelfParentRelationship => "Self-parent relationship",
+            TreeIntegrityIssueCode.DuplicateParentChildRelationship => "Duplicate relationship",
+            TreeIntegrityIssueCode.ConflictingParentChildRelationshipTypes => "Conflicting relationship types",
+            TreeIntegrityIssueCode.ParentBornAfterChild => "Parent born after child",
+            TreeIntegrityIssueCode.ParentTooYoungAtChildBirth => "Parent age too young",
+            TreeIntegrityIssueCode.ParentUnusuallyOldAtChildBirth => "Parent age unusually high",
+            TreeIntegrityIssueCode.ChildBornLongAfterParentDeath => "Birth after parent death",
+            TreeIntegrityIssueCode.PosthumousBirthForReview => "Posthumous birth review",
+            _ => code.ToString()
+        };
+}
