@@ -1,0 +1,158 @@
+@page "/people/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject PersonProfileQueryService ProfileQuery
+@inject NavigationManager Navigation
+
+<PageTitle>Person Profile - Loper Family Tree Builder</PageTitle>
+
+@if (_loading)
+{
+    <section class="page-card">Loading person command profile...</section>
+}
+else if (_profile is null)
+{
+    <section class="page-card empty-state">
+        <h1>Person not found</h1>
+        <p>The requested internal record ID was not found. No genealogy data was changed.</p>
+        <button class="secondary-action" @onclick="BackToPeople">Return to People</button>
+    </section>
+}
+else
+{
+    <div class="profile-hero">
+        <div>
+            <div class="hud-eyebrow">PERSON COMMAND PROFILE</div>
+            <h1>@_profile.DisplayName</h1>
+            <div class="profile-hero-meta">
+                <span>@_profile.Lifespan</span>
+                <span>@(_profile.IsLiving ? "Living" : "Deceased")</span>
+                @if (_profile.FamilyBranches.Count > 0)
+                {
+                    <span>@string.Join(" · ", _profile.FamilyBranches)</span>
+                }
+            </div>
+        </div>
+        <div class="profile-legacy-block">
+            <span>ROBERT J. LOPER LEGACY NUMBER</span>
+            <strong>@(_profile.LegacyNumber ?? "Not assigned")</strong>
+            <small>@(_profile.HasProtectedLegacyNumber ? "IMMUTABLE HISTORICAL IDENTIFIER" : "NO HISTORICAL IDENTIFIER RECORDED")</small>
+        </div>
+    </div>
+
+    <section class="profile-metric-grid">
+        <div class="people-metric"><span>Parents recorded</span><strong>@_profile.Parents.Count</strong></div>
+        <div class="people-metric"><span>Children recorded</span><strong>@_profile.Children.Count</strong></div>
+        <div class="people-metric"><span>Family branches</span><strong>@_profile.FamilyBranches.Count</strong></div>
+        <div class="people-metric"><span>Record status</span><strong>@(_profile.IsLiving ? "LIVE" : "HIST")</strong></div>
+    </section>
+
+    <div class="profile-layout">
+        <section class="page-card">
+            <div class="hud-panel-header">
+                <div>
+                    <span class="hud-eyebrow">IDENTITY + LIFE</span>
+                    <h2>Core record</h2>
+                </div>
+                <span class="hud-panel-code">ID @_profile.Id.ToString()[..8]</span>
+            </div>
+            <dl class="profile-data-grid">
+                <div><dt>Full name</dt><dd>@_profile.DisplayName</dd></div>
+                <div><dt>Birth</dt><dd>@FormatLifeDate(_profile.BirthDate)</dd></div>
+                <div><dt>Death</dt><dd>@FormatLifeDate(_profile.DeathDate)</dd></div>
+                <div><dt>Living status</dt><dd>@(_profile.IsLiving ? "Living" : "Deceased")</dd></div>
+                <div><dt>Created</dt><dd>@_profile.CreatedUtc.LocalDateTime.ToString("MMM d, yyyy")</dd></div>
+                <div><dt>Last updated</dt><dd>@_profile.ModifiedUtc.LocalDateTime.ToString("MMM d, yyyy")</dd></div>
+            </dl>
+        </section>
+
+        <section class="page-card">
+            <div class="hud-panel-header">
+                <div>
+                    <span class="hud-eyebrow">FAMILY CONNECTIONS</span>
+                    <h2>Recorded relationships</h2>
+                </div>
+                <span class="hud-panel-code">REVIEW ONLY</span>
+            </div>
+
+            <div class="profile-relatives-grid">
+                <div>
+                    <h3>Parents</h3>
+                    @if (_profile.Parents.Count == 0)
+                    {
+                        <p class="people-muted">No parent relationships recorded.</p>
+                    }
+                    else
+                    {
+                        @foreach (var relative in _profile.Parents)
+                        {
+                            <a class="relative-row" href="@($"/people/{relative.Id}")">
+                                <span><strong>@relative.DisplayName</strong><small>@relative.RelationshipKind parent</small></span>
+                                <b>@(relative.LegacyNumber ?? "—")</b>
+                            </a>
+                        }
+                    }
+                </div>
+                <div>
+                    <h3>Children</h3>
+                    @if (_profile.Children.Count == 0)
+                    {
+                        <p class="people-muted">No child relationships recorded.</p>
+                    }
+                    else
+                    {
+                        @foreach (var relative in _profile.Children)
+                        {
+                            <a class="relative-row" href="@($"/people/{relative.Id}")">
+                                <span><strong>@relative.DisplayName</strong><small>@relative.RelationshipKind child</small></span>
+                                <b>@(relative.LegacyNumber ?? "—")</b>
+                            </a>
+                        }
+                    }
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="page-card profile-module-panel">
+        <div class="hud-panel-header">
+            <div>
+                <span class="hud-eyebrow">CONNECTED WORKSPACES</span>
+                <h2>Research and archive modules</h2>
+            </div>
+            <button class="secondary-action" @onclick="BackToPeople">Back to People</button>
+        </div>
+
+        <div class="profile-module-grid">
+            <a href="/family-tree"><strong>Family Tree</strong><span>Render ancestors and descendants from the genealogy graph.</span></a>
+            <a href="/tree-integrity"><strong>Tree Integrity</strong><span>Review chronology and relationship warnings before making changes.</span></a>
+            <a href="/medical"><strong>Medical & Health</strong><span>Open protected family-health records and hereditary review tools.</span></a>
+            <a href="/medical-search"><strong>Medical Search</strong><span>Search conditions across authorized family-health records.</span></a>
+            <a href="/ai-transcription"><strong>AI Transcription</strong><span>Review historical document transcription drafts and corrections.</span></a>
+            <a href="/dna-clusters"><strong>DNA Clusters</strong><span>Review private shared-match evidence and clustering research.</span></a>
+        </div>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public Guid PersonId { get; set; }
+
+    private PersonProfileSnapshot? _profile;
+    private bool _loading;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        try
+        {
+            _profile = await ProfileQuery.GetAsync(PersonId);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BackToPeople() => Navigation.NavigateTo("/people");
+    private static string FormatLifeDate(DateOnly? date) => date?.ToString("MMMM d, yyyy") ?? "Not recorded";
+}
