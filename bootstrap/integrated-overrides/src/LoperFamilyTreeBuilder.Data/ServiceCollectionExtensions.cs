@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.AddScoped<PeopleQueryService>();
+        services.AddScoped<PersonProfileQueryService>();
         services.AddScoped<PersonCommandService>();
         services.AddScoped<FamilyBranchQueryService>();
         services.AddScoped<DashboardQueryService>();
