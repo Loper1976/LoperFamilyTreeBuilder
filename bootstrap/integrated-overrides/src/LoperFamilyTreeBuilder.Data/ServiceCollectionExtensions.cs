@@ -26,6 +26,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<DashboardQueryService>();
         services.AddScoped<TreeIntegrityQueryService>();
         services.AddScoped<FamilyTreeQueryService>();
+        services.AddScoped<MedicalHealthQueryService>();
         services.AddScoped<CoreDataInitializationService>();
         return services;
     }

@@ -1,0 +1,86 @@
+@page "/medical"
+@rendermode InteractiveServer
+@inject MedicalHealthQueryService MedicalHealth
+
+<PageTitle>Medical & Family Health - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">RESTRICTED FAMILY ARCHIVE</div>
+        <h1>Medical &amp; Family Health</h1>
+        <p>Structured family health history with explicit privacy controls. This module records evidence; it does not diagnose.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected">OWNER / ADMIN VIEW</span>
+</div>
+
+@if (_loading)
+{
+    <div class="page-card"><p>Loading protected health summary...</p></div>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error">@_error</div>
+}
+else if (_summary is not null)
+{
+    <div class="summary-grid hud-summary-grid">
+        <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>RECORDS</span><i></i></div><div class="summary-value">@_summary.VisibleRecords</div><div class="summary-label">Visible conditions</div></div>
+        <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>PEOPLE</span><i></i></div><div class="summary-value">@_summary.PeopleWithRecords</div><div class="summary-label">People represented</div></div>
+        <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>PATTERN</span><i></i></div><div class="summary-value">@_summary.HereditaryRelevantRecords</div><div class="summary-label">Hereditary-relevant records</div></div>
+        <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>STATUS</span><i></i></div><div class="summary-value">@_summary.ActiveOrConfirmedRecords</div><div class="summary-label">Active or confirmed</div></div>
+    </div>
+
+    <div class="hud-dashboard-grid">
+        <section class="page-card">
+            <div class="hud-panel-header">
+                <div><div class="hud-eyebrow">FAMILY PATTERN SIGNALS</div><h2>Hereditary-relevant conditions</h2></div>
+                <span class="hud-panel-code">EVIDENCE ONLY</span>
+            </div>
+            @if (_summary.FamilyPatterns.Count == 0)
+            {
+                <p>No hereditary-relevant condition patterns have been recorded yet.</p>
+            }
+            else
+            {
+                <table class="people-table">
+                    <thead><tr><th>Condition</th><th>People</th><th>Records</th></tr></thead>
+                    <tbody>
+                    @foreach (var pattern in _summary.FamilyPatterns)
+                    {
+                        <tr><td>@pattern.ConditionName</td><td>@pattern.PeopleCount</td><td>@pattern.RecordCount</td></tr>
+                    }
+                    </tbody>
+                </table>
+            }
+        </section>
+
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">PRIVACY GATE</div><h2>Medical access model</h2></div></div>
+            <p>Every medical record carries an explicit visibility level: Family Summary, Medical Authorized, or Owner Only.</p>
+            <p>Queries must provide an access scope before protected records are returned. This creates the permission boundary required for future authenticated hosting.</p>
+            <a class="secondary-action" href="/medical-search">Open medical search</a>
+        </section>
+    </div>
+}
+
+@code {
+    private MedicalHealthDashboard? _summary;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _summary = await MedicalHealth.GetDashboardAsync(MedicalAccessScope.OwnerAdmin);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Medical dashboard could not be loaded: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

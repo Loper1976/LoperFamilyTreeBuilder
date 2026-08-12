@@ -1,0 +1,89 @@
+@page "/medical-search"
+@rendermode InteractiveServer
+@inject MedicalHealthQueryService MedicalHealth
+
+<PageTitle>Medical Search - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">RESTRICTED SEARCH</div>
+        <h1>Medical Search</h1>
+        <p>Search structured conditions across the family without exposing narrative medical notes in result lists.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected">OWNER / ADMIN VIEW</span>
+</div>
+
+<div class="search-card">
+    <div class="people-filter-grid">
+        <label>
+            Condition or person
+            <input @bind="_search" @bind:event="oninput" placeholder="Condition, surname, given name" />
+        </label>
+        <label>
+            Pattern filter
+            <select @bind="_hereditaryOnly">
+                <option value="false">All visible records</option>
+                <option value="true">Hereditary relevant only</option>
+            </select>
+        </label>
+    </div>
+    <button class="primary-action" @onclick="RunSearchAsync">Search protected records</button>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error">@_error</div>
+}
+else if (_results is not null)
+{
+    <div class="page-card">
+        <div class="hud-panel-header"><div><div class="hud-eyebrow">RESULT SET</div><h2>@_results.Count record(s)</h2></div><span class="hud-panel-code">MAX 250</span></div>
+        @if (_results.Count == 0)
+        {
+            <p>No matching records were found in the current access scope.</p>
+        }
+        else
+        {
+            <table class="people-table">
+                <thead><tr><th>Condition</th><th>Person</th><th>Legacy Number</th><th>Status</th><th>Severity</th><th>Pattern</th><th>Privacy</th></tr></thead>
+                <tbody>
+                @foreach (var record in _results)
+                {
+                    <tr>
+                        <td>@record.ConditionName</td>
+                        <td><a href="@($"/people/{record.PersonId}")">@record.PersonName</a></td>
+                        <td><code>@(record.LegacyNumber ?? "—")</code></td>
+                        <td>@record.Status</td>
+                        <td>@record.Severity</td>
+                        <td>@(record.IsHereditaryRelevant ? "Hereditary relevant" : "Not flagged")</td>
+                        <td>@record.Visibility</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    private string _search = string.Empty;
+    private bool _hereditaryOnly;
+    private IReadOnlyList<MedicalConditionListItem>? _results;
+    private string? _error;
+
+    private async Task RunSearchAsync()
+    {
+        _error = null;
+        try
+        {
+            _results = await MedicalHealth.SearchAsync(
+                _search,
+                MedicalAccessScope.OwnerAdmin,
+                _hereditaryOnly);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Medical search could not be completed: {ex.Message}";
+        }
+    }
+}

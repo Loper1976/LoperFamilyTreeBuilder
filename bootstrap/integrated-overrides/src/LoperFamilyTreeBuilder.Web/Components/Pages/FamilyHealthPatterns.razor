@@ -1,0 +1,49 @@
+@page "/family-health-patterns"
+@rendermode InteractiveServer
+@inject MedicalHealthQueryService MedicalHealth
+
+<PageTitle>Family Health Patterns - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">EVIDENCE PATTERN REVIEW</div>
+        <h1>Family Health Patterns</h1>
+        <p>Counts documented hereditary-relevant conditions across relatives. Pattern counts are not medical diagnoses or risk predictions.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected">REVIEW ONLY</span>
+</div>
+
+@if (_summary is null)
+{
+    <div class="page-card"><p>Loading family health patterns...</p></div>
+}
+else
+{
+    <div class="page-card">
+        @if (_summary.FamilyPatterns.Count == 0)
+        {
+            <p>No hereditary-relevant patterns have been recorded yet.</p>
+        }
+        else
+        {
+            <table class="people-table">
+                <thead><tr><th>Condition</th><th>Distinct relatives</th><th>Documented records</th></tr></thead>
+                <tbody>
+                @foreach (var pattern in _summary.FamilyPatterns)
+                {
+                    <tr><td>@pattern.ConditionName</td><td>@pattern.PeopleCount</td><td>@pattern.RecordCount</td></tr>
+                }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    private MedicalHealthDashboard? _summary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _summary = await MedicalHealth.GetDashboardAsync(MedicalAccessScope.OwnerAdmin);
+    }
+}
