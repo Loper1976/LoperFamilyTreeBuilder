@@ -1,0 +1,320 @@
+@page "/ai-transcription"
+@rendermode InteractiveServer
+@using LoperFamilyTreeBuilder.Core.Entities
+@using LoperFamilyTreeBuilder.Core.Models
+@using LoperFamilyTreeBuilder.Data.Services
+@inject HandwritingTranscriptionService Transcriptions
+
+<PageTitle>AI Cursive Transcriber - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">AI RESEARCH WORKFLOW</div>
+        <h1>AI Cursive Transcriber</h1>
+        <p>Preserve the original image, capture a machine draft, review corrections, and approve a final transcript without changing historical genealogy data.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected">PROPOSAL FIRST</span>
+</div>
+
+<section class="page-card">
+    <div class="hud-panel-header">
+        <div>
+            <div class="hud-eyebrow">PROVIDER SAFETY GATE</div>
+            <h2>Local archive remains authoritative</h2>
+        </div>
+        <span class="hud-panel-code">NO AUTO-WRITES</span>
+    </div>
+    <p>The transcription workflow is active, including provenance, confidence, human review, approval, and privacy controls. A secure AI provider adapter is not enabled in this build, so documents do not leave the local archive automatically.</p>
+</section>
+
+@if (_loading)
+{
+    <section class="page-card">Loading transcription workspace...</section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="page-card alert alert-error">@_error</section>
+}
+else
+{
+    @if (_dashboard is not null)
+    {
+        <div class="summary-grid hud-summary-grid">
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>TOTAL</span><i></i></div><div class="summary-value">@_dashboard.VisibleRecords</div><div class="summary-label">Visible records</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>QUEUE</span><i></i></div><div class="summary-value">@_dashboard.Queued</div><div class="summary-label">Awaiting AI draft</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>REVIEW</span><i></i></div><div class="summary-value">@(_dashboard.DraftReady + _dashboard.NeedsReview)</div><div class="summary-label">Needs human review</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>APPROVED</span><i></i></div><div class="summary-value">@_dashboard.Approved</div><div class="summary-label">Final transcripts</div></div>
+        </div>
+    }
+
+    <div class="hud-dashboard-grid">
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">NEW REQUEST</div><h2>Queue preserved document</h2></div></div>
+            <div class="form-grid">
+                <label>
+                    Document title
+                    <input @bind="_newTitle" placeholder="Example: 1912 handwritten family letter" />
+                </label>
+                <label>
+                    Preserved archive path
+                    <input @bind="_newArchivePath" placeholder="documents/letters/1912-family-letter.jpg" />
+                </label>
+                <label class="form-grid-wide">
+                    Source citation / provenance
+                    <textarea @bind="_newCitation" rows="3" placeholder="Where the image came from, collection, page, owner, date, or repository"></textarea>
+                </label>
+            </div>
+            <div class="action-row">
+                <button class="primary-action" @onclick="QueueAsync" disabled="@_busy">Queue transcription</button>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(_notice))
+            {
+                <p class="hud-inline-note">@_notice</p>
+            }
+        </section>
+
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">WORKFLOW RULES</div><h2>Evidence preservation</h2></div></div>
+            <p><strong>Original image:</strong> preserved at its archive path and never overwritten by transcription.</p>
+            <p><strong>Machine draft:</strong> retained separately with provider, model, and confidence metadata.</p>
+            <p><strong>Human review:</strong> corrections are stored separately from the original machine draft.</p>
+            <p><strong>Approval:</strong> creates the final approved transcript while retaining prior stages.</p>
+            <p><strong>Genealogy safety:</strong> transcript approval never changes people, relationships, dates, or Legacy Numbers automatically.</p>
+        </section>
+    </div>
+
+    <section class="page-card">
+        <div class="hud-panel-header"><div><div class="hud-eyebrow">TRANSCRIPTION QUEUE</div><h2>Document review pipeline</h2></div><span class="hud-panel-code">@_queue.Count RECORDS</span></div>
+        @if (_queue.Count == 0)
+        {
+            <p>No handwriting transcription requests have been queued yet.</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="people-table">
+                    <thead><tr><th>Document</th><th>Person</th><th>Status</th><th>Provider</th><th>Confidence</th><th>Updated</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var item in _queue)
+                    {
+                        <tr>
+                            <td><strong>@item.DocumentTitle</strong><br /><small>@item.ArchiveRelativePath</small></td>
+                            <td>@item.PersonDisplayName@if (!string.IsNullOrWhiteSpace(item.LegacyNumber)) { <br /><small>@item.LegacyNumber</small> }</td>
+                            <td>@item.Status</td>
+                            <td>@(string.IsNullOrWhiteSpace(item.ProviderName) ? "Not run" : item.ProviderName)</td>
+                            <td>@(item.Confidence.HasValue ? item.Confidence.Value.ToString("P0") : "-")</td>
+                            <td>@item.ModifiedUtc.LocalDateTime.ToString("g")</td>
+                            <td><button class="secondary-action" @onclick="() => SelectAsync(item.Id)">Review</button></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (_selected is not null)
+    {
+        <section class="page-card">
+            <div class="hud-panel-header">
+                <div><div class="hud-eyebrow">HUMAN REVIEW</div><h2>@_selected.DocumentTitle</h2></div>
+                <span class="hud-panel-code">@_selected.Status</span>
+            </div>
+            <p><strong>Original:</strong> @_selected.ArchiveRelativePath</p>
+            @if (!string.IsNullOrWhiteSpace(_selected.SourceCitation))
+            {
+                <p><strong>Citation:</strong> @_selected.SourceCitation</p>
+            }
+
+            <div class="form-grid">
+                <label>
+                    AI provider / source
+                    <input @bind="_providerName" placeholder="Provider name" />
+                </label>
+                <label>
+                    Model
+                    <input @bind="_modelName" placeholder="Model identifier" />
+                </label>
+                <label>
+                    Confidence (0 to 1)
+                    <input @bind="_confidenceText" placeholder="0.85" />
+                </label>
+                <label class="form-grid-wide">
+                    Machine draft
+                    <textarea @bind="_machineDraft" rows="10" placeholder="Paste or import the AI-generated draft here. The machine draft is preserved after human edits."></textarea>
+                </label>
+                <label class="form-grid-wide">
+                    Human-reviewed transcript
+                    <textarea @bind="_reviewedTranscript" rows="10" placeholder="Correct uncertain names, dates, handwriting, and punctuation here."></textarea>
+                </label>
+            </div>
+            <div class="action-row">
+                <button class="secondary-action" @onclick="SaveMachineDraftAsync" disabled="@_busy">Save machine draft</button>
+                <button class="secondary-action" @onclick="SaveReviewAsync" disabled="@_busy">Save human review</button>
+                <button class="primary-action" @onclick="ApproveAsync" disabled="@_busy">Approve final transcript</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_selected.ApprovedTranscript))
+            {
+                <div class="hud-evidence-block">
+                    <div class="hud-eyebrow">APPROVED TRANSCRIPT</div>
+                    <pre>@_selected.ApprovedTranscript</pre>
+                </div>
+            }
+        </section>
+    }
+}
+
+@code {
+    private const HandwritingTranscriptionAccessScope OwnerScope = HandwritingTranscriptionAccessScope.OwnerAdmin;
+    private HandwritingTranscriptionDashboard? _dashboard;
+    private IReadOnlyList<HandwritingTranscriptionQueueItem> _queue = [];
+    private HandwritingTranscriptionDetail? _selected;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _notice;
+
+    private string _newTitle = string.Empty;
+    private string _newArchivePath = string.Empty;
+    private string _newCitation = string.Empty;
+
+    private string _providerName = string.Empty;
+    private string _modelName = string.Empty;
+    private string _confidenceText = string.Empty;
+    private string _machineDraft = string.Empty;
+    private string _reviewedTranscript = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _loading = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            _error = null;
+            _dashboard = await Transcriptions.GetDashboardAsync(OwnerScope);
+            _queue = await Transcriptions.GetQueueAsync(OwnerScope);
+            if (_selected is not null)
+                await SelectAsync(_selected.Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task QueueAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        _notice = null;
+        try
+        {
+            var id = await Transcriptions.QueueAsync(_newTitle, _newArchivePath, _newCitation, null, OwnerScope);
+            _newTitle = string.Empty;
+            _newArchivePath = string.Empty;
+            _newCitation = string.Empty;
+            _notice = "Transcription request queued. The original archive file was not modified.";
+            await RefreshAsync();
+            await SelectAsync(id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SelectAsync(Guid id)
+    {
+        _selected = await Transcriptions.GetAsync(id, OwnerScope);
+        if (_selected is null) return;
+
+        _providerName = _selected.ProviderName;
+        _modelName = _selected.ModelName;
+        _confidenceText = _selected.Confidence?.ToString("0.####") ?? string.Empty;
+        _machineDraft = _selected.MachineDraft;
+        _reviewedTranscript = _selected.ReviewedTranscript;
+    }
+
+    private async Task SaveMachineDraftAsync()
+    {
+        if (_selected is null || _busy) return;
+        _busy = true;
+        try
+        {
+            decimal? confidence = null;
+            if (!string.IsNullOrWhiteSpace(_confidenceText))
+            {
+                if (!decimal.TryParse(_confidenceText, out var parsed))
+                    throw new InvalidOperationException("Confidence must be a number from 0 through 1.");
+                confidence = parsed;
+            }
+
+            await Transcriptions.RecordMachineDraftAsync(
+                _selected.Id,
+                _machineDraft,
+                _providerName,
+                _modelName,
+                confidence,
+                OwnerScope);
+            _notice = "Machine draft saved separately from the original image.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveReviewAsync()
+    {
+        if (_selected is null || _busy) return;
+        _busy = true;
+        try
+        {
+            await Transcriptions.SaveReviewAsync(_selected.Id, _reviewedTranscript, OwnerScope);
+            _notice = "Human review saved. The machine draft remains preserved.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task ApproveAsync()
+    {
+        if (_selected is null || _busy) return;
+        _busy = true;
+        try
+        {
+            await Transcriptions.ApproveAsync(_selected.Id, OwnerScope);
+            _notice = "Final transcript approved without modifying genealogy records or Legacy Numbers.";
+            await RefreshAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

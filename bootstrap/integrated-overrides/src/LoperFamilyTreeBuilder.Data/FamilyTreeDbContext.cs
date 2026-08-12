@@ -17,6 +17,7 @@ public sealed class FamilyTreeDbContext : DbContext
     public DbSet<ParentChildRelationship> ParentChildRelationships => Set<ParentChildRelationship>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<MedicalCondition> MedicalConditions => Set<MedicalCondition>();
+    public DbSet<HandwritingTranscription> HandwritingTranscriptions => Set<HandwritingTranscription>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
