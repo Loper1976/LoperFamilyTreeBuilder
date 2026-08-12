@@ -19,7 +19,7 @@ Add-Type -AssemblyName System.Drawing
 $image=[System.Drawing.Image]::FromFile($sourceLogo)
 try {
     if($image.Width -lt 1 -or $image.Height -lt 1){throw 'LOPER Texas logo dimensions are invalid.'}
-    $canvas=New-Object System.Drawing.Bitmap 64,64,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb
+    $canvas=[System.Drawing.Bitmap]::new(64,64,[System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     try {
         $graphics=[System.Drawing.Graphics]::FromImage($canvas)
         try {
