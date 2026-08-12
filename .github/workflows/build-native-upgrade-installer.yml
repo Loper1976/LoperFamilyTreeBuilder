@@ -89,7 +89,8 @@ jobs:
             $packageText = [regex]::Replace($packageText,'ProductCode="[^"]+"','ProductCode="*"',1)
           }
           if ($packageText -notmatch '<MajorUpgrade\b') {
-            $packageText = $packageText.Replace('</Package>',"  <MajorUpgrade DowngradeErrorMessage=\"A newer version of Loper Family Tree Builder is already installed.\" />`r`n</Package>")
+            $majorUpgrade = '  <MajorUpgrade DowngradeErrorMessage="A newer version of Loper Family Tree Builder is already installed." />' + "`r`n</Package>"
+            $packageText = $packageText.Replace('</Package>', $majorUpgrade)
           }
           $packageText = $packageText.Replace('Root="HKMU"','Root="HKCU"')
           Set-Content $packagePath $packageText -Encoding utf8
