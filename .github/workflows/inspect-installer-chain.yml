@@ -1,0 +1,39 @@
+name: Inspect Installer Chain
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - agent/integrated-desktop-release
+    paths:
+      - '.github/workflows/inspect-installer-chain.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble source
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @('bootstrap/source.part01.b64','bootstrap/source.part02.b64','bootstrap/source.part03.b64','bootstrap/source.part04.b64','bootstrap/source.part05.b64','bootstrap/source.part06.b64')) { $base64 += (Get-Content $part -Raw).Trim() }
+          $base64 += (Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+          $part7d = (Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          $base64 += $part7d.Substring(0,4500)
+          $base64 += (Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+          [IO.File]::WriteAllBytes('phase3.zip',[Convert]::FromBase64String($base64))
+          Expand-Archive phase3.zip -DestinationPath source -Force
+      - name: Print installer definitions
+        shell: pwsh
+        run: |
+          $root = "$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3"
+          Write-Host '=== Package.wxs ==='
+          Get-Content "$root\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
+          Write-Host '=== Bundle.wxs ==='
+          Get-Content "$root\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
