@@ -1,0 +1,43 @@
+<div class="tree-branch">
+    <article class="tree-person-card @(Node.CycleSuppressed ? "tree-person-cycle" : string.Empty)">
+        <div class="tree-person-generation">GEN @Node.Generation</div>
+        <a class="tree-person-name" href="@($"/people/{Node.Person.Id}")">
+            @Node.Person.DisplayName
+        </a>
+        @if (!string.IsNullOrWhiteSpace(Node.Person.LegacyNumber))
+        {
+            <div class="tree-person-legacy">@Node.Person.LegacyNumber</div>
+        }
+        <div class="tree-person-dates">@LifeSpan(Node.Person)</div>
+        @if (Node.RelationshipType.HasValue)
+        {
+            <div class="tree-person-relation">@Node.RelationshipType</div>
+        }
+        @if (Node.CycleSuppressed)
+        {
+            <div class="tree-cycle-alert">Cycle suppressed for safety</div>
+        }
+    </article>
+
+    @if (Node.Branches.Count > 0)
+    {
+        <div class="tree-children">
+            @foreach (var branch in Node.Branches)
+            {
+                <FamilyTreeNodeView Node="branch" />
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public FamilyTreeNode Node { get; set; } = null!;
+
+    private static string LifeSpan(FamilyTreePersonSnapshot person)
+    {
+        var birth = person.BirthDate?.Year.ToString() ?? "?";
+        var death = person.IsLiving ? "Living" : person.DeathDate?.Year.ToString() ?? "?";
+        return $"{birth} - {death}";
+    }
+}

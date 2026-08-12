@@ -1,0 +1,143 @@
+@page "/family-tree"
+@rendermode InteractiveServer
+@inject FamilyTreeQueryService FamilyTreeQuery
+@inject PeopleQueryService PeopleQuery
+
+<PageTitle>Family Tree - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">GENEALOGY VISUALIZATION</div>
+        <h1>Family Tree</h1>
+        <p>Navigate ancestors and descendants without modifying historical records or Legacy Numbers.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected"><i></i>LEGACY NUMBERS READ ONLY</span>
+</div>
+
+<section class="page-card tree-controls-card">
+    <div class="tree-control-grid">
+        <div class="tree-search-control">
+            <label>Root person</label>
+            <div class="tree-search-row">
+                <input @bind="_searchText" @bind:event="oninput" placeholder="Name or Legacy Number" />
+                <button class="secondary-action" @onclick="SearchAsync">Search</button>
+            </div>
+        </div>
+        <div>
+            <label>View</label>
+            <select @bind="_direction">
+                <option value="@FamilyTreeDirection.Ancestors">Ancestors</option>
+                <option value="@FamilyTreeDirection.Descendants">Descendants</option>
+            </select>
+        </div>
+        <div>
+            <label>Generations</label>
+            <select @bind="_depth">
+                @for (var depth = 2; depth <= 6; depth++)
+                {
+                    <option value="@depth">@depth</option>
+                }
+            </select>
+        </div>
+        <div class="tree-render-action">
+            <button class="primary-action" disabled="@(!_selectedPersonId.HasValue || _loading)" @onclick="LoadTreeAsync">Render Tree</button>
+        </div>
+    </div>
+
+    @if (_searchResults.Count > 0)
+    {
+        <div class="tree-search-results">
+            @foreach (var person in _searchResults)
+            {
+                <button class="tree-search-result @(_selectedPersonId == person.Id ? "selected" : string.Empty)" @onclick="() => SelectPersonAsync(person)">
+                    <strong>@person.DisplayName</strong>
+                    <span>@(string.IsNullOrWhiteSpace(person.LegacyNumber) ? "No Legacy Number" : person.LegacyNumber)</span>
+                </button>
+            }
+        </div>
+    }
+</section>
+
+@if (_loading)
+{
+    <section class="page-card">Building family tree view...</section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="page-card alert alert-error">@_error</section>
+}
+else if (_view is null)
+{
+    <section class="page-card empty-state">
+        <h2>Select a root person</h2>
+        <p>Search by name or exact historical Legacy Number, then choose ancestor or descendant view.</p>
+    </section>
+}
+else
+{
+    <section class="page-card tree-viewport-card">
+        <div class="tree-viewport-toolbar">
+            <div>
+                <span class="hud-eyebrow">@_view.Direction.ToString().ToUpperInvariant()</span>
+                <strong>@_view.Root.Person.DisplayName</strong>
+            </div>
+            <div class="tree-metrics">
+                <span>@_view.NodeCount nodes</span>
+                <span>@_view.RequestedDepth generation depth</span>
+                @if (_view.NodeLimitReached)
+                {
+                    <span class="tree-limit-warning">Safety node limit reached</span>
+                }
+            </div>
+        </div>
+        <div class="tree-viewport">
+            <FamilyTreeNodeView Node="_view.Root" />
+        </div>
+    </section>
+}
+
+@code {
+    private string _searchText = string.Empty;
+    private IReadOnlyList<PersonListItem> _searchResults = [];
+    private Guid? _selectedPersonId;
+    private FamilyTreeDirection _direction = FamilyTreeDirection.Ancestors;
+    private int _depth = 4;
+    private FamilyTreeView? _view;
+    private bool _loading;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await SearchAsync();
+
+    private async Task SearchAsync()
+    {
+        _error = null;
+        var result = await PeopleQuery.SearchAsync(new PeopleSearchRequest { SearchText = _searchText, Page = 1, PageSize = 20 });
+        _searchResults = result.Items;
+    }
+
+    private async Task SelectPersonAsync(PersonListItem person)
+    {
+        _selectedPersonId = person.Id;
+        await LoadTreeAsync();
+    }
+
+    private async Task LoadTreeAsync()
+    {
+        if (!_selectedPersonId.HasValue) return;
+        _loading = true;
+        _error = null;
+        try
+        {
+            _view = await FamilyTreeQuery.GetViewAsync(_selectedPersonId.Value, _direction, _depth);
+        }
+        catch (Exception ex)
+        {
+            _view = null;
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}
