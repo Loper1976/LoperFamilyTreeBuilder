@@ -1,0 +1,47 @@
+@page "/timeline/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+@inject PersonProfileQueryService ProfileQuery
+
+<PageTitle>Lifetime Timeline - Loper Family Tree Builder</PageTitle>
+
+@if (_profile is null)
+{
+    <section class="page-card">Loading lifetime timeline...</section>
+}
+else
+{
+    <div class="hud-page-header"><div><span class="hud-eyebrow">LIFETIME TIMELINE</span><h1>@_profile.DisplayName</h1><p>Dated, sourced life events in chronological order. Approximate dates and original place text are preserved.</p></div><span class="hud-panel-code">@_events.Count EVENTS</span></div>
+    <section class="page-card">
+        @if (_events.Count == 0)
+        {
+            <div class="empty-state"><h2>No structured life events yet</h2><p>Add birth, residence, census, military, employment, travel, burial, and other documented events as research is entered.</p></div>
+        }
+        else
+        {
+            <div class="timeline-stack">
+                @foreach (var item in _events)
+                {
+                    <article class="timeline-entry">
+                        <div class="timeline-date">@(item.IsApproximate ? "c. " : string.Empty)@(item.StartDate?.ToString("MMM d, yyyy") ?? "Undated")</div>
+                        <div><span class="hud-eyebrow">@item.EventType.ToString().ToUpperInvariant()</span><h3>@item.Title</h3>
+                        @if (!string.IsNullOrWhiteSpace(item.PlaceText)) { <p>📍 @item.PlaceText</p> }
+                        @if (!string.IsNullOrWhiteSpace(item.Notes)) { <p>@item.Notes</p> }
+                        @if (!string.IsNullOrWhiteSpace(item.SourceCitation)) { <small>Source: @item.SourceCitation</small> }</div>
+                    </article>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public Guid PersonId { get; set; }
+    private PersonProfileSnapshot? _profile;
+    private IReadOnlyList<LifeEventRow> _events = [];
+    protected override async Task OnParametersSetAsync()
+    {
+        _profile = await ProfileQuery.GetAsync(PersonId);
+        if (_profile is not null) _events = await Archive.GetTimelineAsync(PersonId);
+    }
+}

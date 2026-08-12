@@ -1,0 +1,41 @@
+@page "/relationships/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+@inject PersonProfileQueryService ProfileQuery
+
+<PageTitle>Relationships - Loper Family Tree Builder</PageTitle>
+
+@if (_profile is null)
+{
+    <section class="page-card">Loading relationship workspace...</section>
+}
+else
+{
+    <div class="hud-page-header"><div><span class="hud-eyebrow">RELATIONSHIP WORKSPACE</span><h1>@_profile.DisplayName</h1><p>Review family links and recorded unions without changing Robert J. Loper Legacy Numbers.</p></div><span class="hud-panel-code">LEGACY @(_profile.LegacyNumber ?? "—")</span></div>
+    <div class="profile-layout">
+        <section class="page-card"><div class="hud-panel-header"><div><span class="hud-eyebrow">PARENT / CHILD</span><h2>Recorded family links</h2></div><span class="hud-panel-code">@_links.Count LINKS</span></div>
+            @if (_links.Count == 0) { <p class="people-muted">No parent/child relationships recorded.</p> }
+            else { @foreach (var link in _links) { <a class="relative-row" href="@($"/people/{link.PersonId}")"><span><strong>@link.DisplayName</strong><small>@link.Role · @link.RelationshipType</small></span><b>@(string.IsNullOrWhiteSpace(link.LegacyNumber) ? "—" : link.LegacyNumber)</b></a> } }
+        </section>
+        <section class="page-card"><div class="hud-panel-header"><div><span class="hud-eyebrow">SPOUSE / PARTNER</span><h2>Unions</h2></div><span class="hud-panel-code">@_unions.Count UNION(S)</span></div>
+            @if (_unions.Count == 0) { <p class="people-muted">No spouse/partner unions recorded yet.</p> }
+            else { @foreach (var union in _unions) { <div class="relative-row"><span><strong>@union.OtherPersonName</strong><small>@union.UnionType · @union.Status · @FormatRange(union.StartDate, union.EndDate)</small></span><b>@(string.IsNullOrWhiteSpace(union.OtherLegacyNumber) ? "—" : union.OtherLegacyNumber)</b></div> } }
+        </section>
+    </div>
+    <section class="page-card"><span class="hud-eyebrow">SAFEGUARDS</span><h2>Relationship preservation rules</h2><p>Stable person IDs drive relationships. Legacy Numbers remain immutable historical text. Duplicate unions and self-unions are blocked, and chronology is validated before a union is saved.</p></section>
+}
+
+@code {
+    [Parameter] public Guid PersonId { get; set; }
+    private PersonProfileSnapshot? _profile;
+    private IReadOnlyList<RelationshipWorkspaceRow> _links = [];
+    private IReadOnlyList<UnionWorkspaceRow> _unions = [];
+    protected override async Task OnParametersSetAsync()
+    {
+        _profile = await ProfileQuery.GetAsync(PersonId);
+        if (_profile is null) return;
+        _links = await Archive.GetParentChildRelationshipsAsync(PersonId);
+        _unions = await Archive.GetUnionsAsync(PersonId);
+    }
+    private static string FormatRange(DateOnly? start, DateOnly? end) => start is null && end is null ? "Dates not recorded" : $"{start?.ToString("MMM d, yyyy") ?? "?"} – {end?.ToString("MMM d, yyyy") ?? "present"}";
+}

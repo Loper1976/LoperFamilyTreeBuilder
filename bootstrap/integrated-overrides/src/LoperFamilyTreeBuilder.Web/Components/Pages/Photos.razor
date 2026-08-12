@@ -1,0 +1,19 @@
+@page "/photos"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+
+<PageTitle>Photos - Loper Family Tree Builder</PageTitle>
+<div class="hud-page-header"><div><span class="hud-eyebrow">ARCHIVE / PHOTOS</span><h1>Photo & Media Archive</h1><p>Person tagging, captions, capture time, original place text, EXIF-ready metadata, and optional GPS coordinates.</p></div><span class="hud-panel-code">@_items.Count PHOTOS</span></div>
+<section class="page-card">
+    @if (_items.Count == 0) { <div class="empty-state"><h2>No structured photo records yet</h2><p>When photos are added, original files remain preserved while metadata and GPS are stored separately.</p></div> }
+    else
+    {
+        <div class="profile-module-grid">
+        @foreach (var item in _items)
+        {
+            <article><strong>@item.Title</strong><span>@(string.IsNullOrWhiteSpace(item.PersonName) ? "No person tagged" : item.PersonName)</span><span>@(item.CapturedUtc?.LocalDateTime.ToString("MMM d, yyyy h:mm tt") ?? "Capture date unavailable")</span><span>@(string.IsNullOrWhiteSpace(item.PlaceText) ? "Place unavailable" : item.PlaceText)</span><span>@(item.Latitude.HasValue && item.Longitude.HasValue ? $"GPS {item.Latitude:0.000000}, {item.Longitude:0.000000}" : "GPS unavailable")</span></article>
+        }
+        </div>
+    }
+</section>
+@code { private IReadOnlyList<ArchiveItemRow> _items = []; protected override async Task OnInitializedAsync() => _items = await Archive.GetArchiveItemsAsync(ArchiveItemType.Photo); }

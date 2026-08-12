@@ -1,0 +1,16 @@
+@page "/documents"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+
+<PageTitle>Documents - Loper Family Tree Builder</PageTitle>
+<div class="hud-page-header"><div><span class="hud-eyebrow">ARCHIVE / DOCUMENTS</span><h1>Document Archive</h1><p>Preserved originals, person links, integrity fingerprints, provenance, and source connections.</p></div><span class="hud-panel-code">@_items.Count DOCUMENTS</span></div>
+<section class="page-card">
+    @if (_items.Count == 0) { <div class="empty-state"><h2>No structured document records yet</h2><p>Original documents remain outside GitHub and are referenced by protected archive paths.</p></div> }
+    else
+    {
+        <div class="people-table-wrap"><table class="people-table"><thead><tr><th>Title</th><th>Person</th><th>Original</th><th>Integrity</th><th>Provenance</th></tr></thead><tbody>
+        @foreach (var item in _items) { <tr><td><strong>@item.Title</strong><small>@item.ItemType</small></td><td>@(string.IsNullOrWhiteSpace(item.PersonName) ? "Unlinked" : item.PersonName)</td><td>@item.OriginalPath</td><td>@(string.IsNullOrWhiteSpace(item.Sha256) ? "Hash pending" : item.Sha256[..Math.Min(12, item.Sha256.Length)] + "…")</td><td>@(string.IsNullOrWhiteSpace(item.Provenance) ? "Needs provenance" : item.Provenance)</td></tr> }
+        </tbody></table></div>
+    }
+</section>
+@code { private IReadOnlyList<ArchiveItemRow> _items = []; protected override async Task OnInitializedAsync() => _items = await Archive.GetArchiveItemsAsync(ArchiveItemType.Document); }

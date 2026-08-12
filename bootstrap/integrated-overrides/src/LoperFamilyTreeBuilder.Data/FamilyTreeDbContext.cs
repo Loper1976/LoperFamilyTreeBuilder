@@ -20,6 +20,10 @@ public sealed class FamilyTreeDbContext : DbContext
     public DbSet<HandwritingTranscription> HandwritingTranscriptions => Set<HandwritingTranscription>();
     public DbSet<DnaMatch> DnaMatches => Set<DnaMatch>();
     public DbSet<DnaSharedMatch> DnaSharedMatches => Set<DnaSharedMatch>();
+    public DbSet<FamilyUnion> FamilyUnions => Set<FamilyUnion>();
+    public DbSet<LifeEvent> LifeEvents => Set<LifeEvent>();
+    public DbSet<ArchiveItem> ArchiveItems => Set<ArchiveItem>();
+    public DbSet<SourceRecord> SourceRecords => Set<SourceRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

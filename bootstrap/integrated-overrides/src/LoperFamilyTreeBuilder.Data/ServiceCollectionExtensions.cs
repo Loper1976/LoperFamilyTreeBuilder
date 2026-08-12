@@ -31,6 +31,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<MedicalHealthQueryService>();
         services.AddScoped<HandwritingTranscriptionService>();
         services.AddScoped<DnaMatchService>();
+        services.AddScoped<LifeArchiveService>();
         services.AddScoped<CoreDataInitializationService>();
         return services;
     }

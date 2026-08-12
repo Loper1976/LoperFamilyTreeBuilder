@@ -1,0 +1,16 @@
+@page "/sources"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+
+<PageTitle>Sources - Loper Family Tree Builder</PageTitle>
+<div class="hud-page-header"><div><span class="hud-eyebrow">ARCHIVE / SOURCES</span><h1>Source & Citation Repository</h1><p>Structured citations and provenance stay separate from assertions so evidence can be reused across people, events, and media.</p></div><span class="hud-panel-code">@_sources.Count SOURCES</span></div>
+<section class="page-card">
+    @if (_sources.Count == 0) { <div class="empty-state"><h2>No structured sources yet</h2><p>Add citations as records are reviewed. Source records do not alter historical person identifiers.</p></div> }
+    else
+    {
+        <div class="people-table-wrap"><table class="people-table"><thead><tr><th>Source</th><th>Person</th><th>Citation</th><th>Repository</th><th>Locator</th></tr></thead><tbody>
+        @foreach (var source in _sources) { <tr><td><strong>@source.Title</strong></td><td>@(string.IsNullOrWhiteSpace(source.PersonName) ? "General source" : source.PersonName)</td><td>@source.Citation</td><td>@(string.IsNullOrWhiteSpace(source.Repository) ? "—" : source.Repository)</td><td>@(string.IsNullOrWhiteSpace(source.CallNumberOrUrl) ? "—" : source.CallNumberOrUrl)</td></tr> }
+        </tbody></table></div>
+    }
+</section>
+@code { private IReadOnlyList<SourceRecordRow> _sources = []; protected override async Task OnInitializedAsync() => _sources = await Archive.GetSourcesAsync(); }

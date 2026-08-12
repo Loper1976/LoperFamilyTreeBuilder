@@ -1,0 +1,40 @@
+@page "/maps/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject LifeArchiveService Archive
+@inject PersonProfileQueryService ProfileQuery
+
+<PageTitle>Maps & Migration - Loper Family Tree Builder</PageTitle>
+
+@if (_profile is null)
+{
+    <section class="page-card">Loading geography workspace...</section>
+}
+else
+{
+    <div class="hud-page-header"><div><span class="hud-eyebrow">MAPS + LIFETIME MIGRATION</span><h1>@_profile.DisplayName</h1><p>Historical place text stays intact while optional coordinates support future embedded mapping and movement visualization.</p></div><span class="hud-panel-code">@_points.Count PLACES</span></div>
+    <section class="page-card"><div class="hud-panel-header"><div><span class="hud-eyebrow">MOVEMENT LEDGER</span><h2>Documented locations</h2></div><span class="hud-panel-code">SOURCE-LINKED</span></div>
+        @if (_points.Count == 0) { <div class="empty-state"><p>No mapped life events are recorded yet.</p></div> }
+        else
+        {
+            <div class="people-table-wrap"><table class="people-table"><thead><tr><th>Date</th><th>Event</th><th>Place</th><th>Coordinates</th><th>Evidence</th></tr></thead><tbody>
+            @foreach (var point in _points)
+            {
+                <tr><td>@(point.IsApproximate ? "c. " : string.Empty)@(point.Date?.ToString("MMM d, yyyy") ?? "Undated")</td><td><strong>@point.Title</strong><small>@point.EventType</small></td><td>@(string.IsNullOrWhiteSpace(point.PlaceText) ? "Original place not recorded" : point.PlaceText)</td><td>@FormatCoordinates(point.Latitude, point.Longitude)</td><td>@(string.IsNullOrWhiteSpace(point.SourceCitation) ? "Needs citation" : point.SourceCitation)</td></tr>
+            }
+            </tbody></table></div>
+        }
+    </section>
+    <section class="page-card"><span class="hud-eyebrow">MAPPING SAFEGUARD</span><h2>Original geography is preserved</h2><p>Geocoding never replaces the historically recorded place string. Coordinates are stored separately, and uncertain dates remain marked as approximate.</p></section>
+}
+
+@code {
+    [Parameter] public Guid PersonId { get; set; }
+    private PersonProfileSnapshot? _profile;
+    private IReadOnlyList<MapPointRow> _points = [];
+    protected override async Task OnParametersSetAsync()
+    {
+        _profile = await ProfileQuery.GetAsync(PersonId);
+        if (_profile is not null) _points = await Archive.GetMapPointsAsync(PersonId);
+    }
+    private static string FormatCoordinates(decimal? lat, decimal? lon) => lat.HasValue && lon.HasValue ? $"{lat:0.000000}, {lon:0.000000}" : "Not geocoded";
+}
