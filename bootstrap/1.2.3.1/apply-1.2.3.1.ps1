@@ -1,12 +1,20 @@
 param([Parameter(Mandatory=$true)][string]$Root)
 $ErrorActionPreference='Stop'
+$workspace=$env:GITHUB_WORKSPACE
+if([string]::IsNullOrWhiteSpace($workspace)){throw 'GITHUB_WORKSPACE is missing.'}
 if(-not(Test-Path $Root)){throw "Source root missing: $Root"}
 
-# Validate the official LOPER Texas JPEG and create a WiX-friendly 64px PNG.
+# Replace the bad 1.2.3 logo payload with a verified base64 derivative made from the user's uploaded LOPER Texas logo.
 $sourceLogo=Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/wwwroot/images/loper-logo.jpg'
 $installerLogo=Join-Path $Root 'src/LoperFamilyTreeBuilder.Web/wwwroot/images/loper-installer-logo.png'
-if(-not(Test-Path $sourceLogo)){throw 'Official LOPER Texas application logo is missing.'}
+$logoB64Path=Join-Path $workspace 'bootstrap/1.2.3.1/loper-texas-logo-160.b64'
+if(-not(Test-Path $logoB64Path)){throw 'Verified LOPER Texas logo payload is missing.'}
+$logoB64=(Get-Content $logoB64Path -Raw).Trim()
+$logoBytes=[Convert]::FromBase64String($logoB64)
+if($logoBytes.Length -lt 4 -or $logoBytes[0] -ne 0xFF -or $logoBytes[1] -ne 0xD8){throw 'Decoded LOPER logo does not have a JPEG signature.'}
+[IO.File]::WriteAllBytes($sourceLogo,$logoBytes)
 
+# Decode the repaired application logo and create a WiX-friendly 64px PNG.
 Add-Type -AssemblyName System.Drawing
 $image=[System.Drawing.Image]::FromFile($sourceLogo)
 try {
@@ -29,15 +37,21 @@ try {
     } finally { $canvas.Dispose() }
 } finally { $image.Dispose() }
 
-# Decode the generated PNG again. This is a real runtime image validation, not just a hash check.
+# Decode both files again. CI must prove they are real images, not merely files with image extensions.
+$appCheck=[System.Drawing.Image]::FromFile($sourceLogo)
+try {
+    if($appCheck.Width -ne 160 -or $appCheck.Height -ne 149){throw "Application logo dimensions are $($appCheck.Width)x$($appCheck.Height), expected 160x149."}
+} finally { $appCheck.Dispose() }
 $check=[System.Drawing.Image]::FromFile($installerLogo)
 try {
     if($check.Width -ne 64 -or $check.Height -ne 64){throw "Installer logo dimensions are $($check.Width)x$($check.Height), expected 64x64."}
 } finally { $check.Dispose() }
 $pngBytes=[IO.File]::ReadAllBytes($installerLogo)
 if($pngBytes.Length -lt 8 -or $pngBytes[0] -ne 0x89 -or $pngBytes[1] -ne 0x50 -or $pngBytes[2] -ne 0x4E -or $pngBytes[3] -ne 0x47){throw 'Generated installer logo is not a valid PNG payload.'}
+$logoHash=(Get-FileHash $sourceLogo -Algorithm SHA256).Hash.ToLowerInvariant()
+if($logoHash-ne'd93ea75949301d06d5551d43be6076628accf1f0e8cf07fc1ddd47cc44a24a56'){throw "Unexpected repaired application logo hash: $logoHash"}
 
-# Keep the application version at 1.2.3 for SemVer compatibility while identifying the hotfix in file/host metadata.
+# Keep the project package version at 1.2.3 for SemVer compatibility while identifying the hotfix in file/host metadata.
 $propsPath=Join-Path $Root 'Directory.Build.props'
 $props=Get-Content $propsPath -Raw
 $props=$props.Replace('<FileVersion>1.2.3.0</FileVersion>','<FileVersion>1.2.3.1</FileVersion>')
@@ -64,4 +78,4 @@ $bundle=$bundle.Replace('loper-logo.jpg','loper-installer-logo.png')
 $bundle=[regex]::Replace($bundle,'\s+LogoSideFile="[^"]*"','')
 Set-Content $bundlePath $bundle -Encoding utf8
 
-Write-Host '1.2.3.1 applied: validated LOPER Texas JPEG, generated 64x64 PNG for WixStdBA, simplified installer theme, and updated hotfix version markers.'
+Write-Host "1.2.3.1 applied: repaired LOPER Texas JPEG ($logoHash), generated 64x64 PNG for WixStdBA, simplified installer theme, and updated hotfix version markers."
