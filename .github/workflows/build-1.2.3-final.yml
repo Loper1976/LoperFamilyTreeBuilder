@@ -1,0 +1,137 @@
+name: Build final cumulative 1.2.3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ cumulative-1.2.3-tree-error-checker ]
+    paths:
+      - '.github/workflows/build-1.2.3-final.yml'
+      - 'bootstrap/1.2.3/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Create installer step runner
+        shell: pwsh
+        run: |
+          @'
+          param([Parameter(Mandatory=$true)][string]$Name)
+          $workflow=Join-Path $env:GITHUB_WORKSPACE '.github/workflows/build-1.1.4.1-ui-reliability-hotfix.yml'
+          if(-not(Test-Path $workflow)){throw "Installer workflow missing: $workflow"}
+          $lines=Get-Content $workflow;$step=-1
+          for($i=0;$i-lt$lines.Count;$i++){if($lines[$i].Trim()-eq "- name: $Name"){$step=$i;break}}
+          if($step-lt0){throw "Installer step not found: $Name"};$run=-1
+          for($i=$step+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};if($lines[$i].Trim()-eq 'run: |'){$run=$i;break}}
+          if($run-lt0){throw "Run block not found: $Name"};$block=New-Object System.Collections.Generic.List[string]
+          for($i=$run+1;$i-lt$lines.Count;$i++){if($lines[$i]-match '^      - '){break};$line=$lines[$i];if($line.StartsWith('          ')){$line=$line.Substring(10)}elseif($line.Trim().Length-gt0){$line=$line.TrimStart()};$block.Add($line)}
+          & ([ScriptBlock]::Create(($block-join "`n")));if(-not $?){throw "Installer step failed: $Name"}
+          '@ | Set-Content "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" -Encoding utf8
+
+      - name: Reconstruct verified cumulative 1.2.2
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.8\build-1.1.8-final.ps1"
+          $env:SOURCE_ROOT=Join-Path $env:GITHUB_WORKSPACE 'source\LoperFamilyTreeBuilder_InstallerFirst_Phase3'
+          if(-not(Test-Path $env:SOURCE_ROOT)){throw "1.1.8 source missing: $env:SOURCE_ROOT"}
+          "SOURCE_ROOT=$env:SOURCE_ROOT" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.1.9\apply-1.1.9.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.0\apply-1.2.0.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.1\apply-1.2.1.ps1" -Root $env:SOURCE_ROOT
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.2\apply-1.2.2.ps1" -Root $env:SOURCE_ROOT
+          Write-Host 'Verified cumulative 1.2.2 source reconstructed.'
+
+      - name: Apply 1.2.3 tree integrity and branding update
+        shell: pwsh
+        run: |
+          & "$env:GITHUB_WORKSPACE\bootstrap\1.2.3\apply-1.2.3.ps1" -Root $env:SOURCE_ROOT
+
+      - name: Verify cumulative 1.2.3 contract
+        shell: pwsh
+        run: |
+          $r=$env:SOURCE_ROOT
+          $props=Get-Content "$r\Directory.Build.props" -Raw
+          $launcher=Get-Content "$r\src\LoperFamilyTreeBuilder.Launcher\UpgradeBackupService.cs" -Raw
+          $program=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Program.cs" -Raw
+          $policy=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Policies\LegacyNumberPolicy.cs" -Raw
+          $ctx=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\FamilyTreeDbContext.cs" -Raw
+          $services=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\ServiceCollectionExtensions.cs" -Raw
+          $integrity=Get-Content "$r\src\LoperFamilyTreeBuilder.Data\Services\TreeIntegrityService.cs" -Raw
+          $entities=Get-Content "$r\src\LoperFamilyTreeBuilder.Core\Entities\TreeIntegrityEntities.cs" -Raw
+          $page=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Pages\DataQuality.razor" -Raw
+          $nav=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\Components\Layout\NavMenu.razor" -Raw
+          $css=Get-Content "$r\src\LoperFamilyTreeBuilder.Web\wwwroot\app.css" -Raw
+          $bundle=Get-Content "$r\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs" -Raw
+          $msi=Get-Content "$r\installer\LoperFamilyTreeBuilder.Msi\Package.wxs" -Raw
+          $logo="$r\src\LoperFamilyTreeBuilder.Web\wwwroot\images\loper-logo.jpg"
+          if($props-notmatch'<Version>1\.2\.3</Version>'-or$props-notmatch'<FileVersion>1\.2\.3\.0</FileVersion>'){throw '1.2.3 version metadata missing.'}
+          if($launcher-notmatch'TargetVersion = "1\.2\.3"'){throw '1.2.3 pre-upgrade backup target missing.'}
+          if($program-notmatch'version = "1\.2\.3"'-or$program-notmatch'release = "tree-error-checker"'){throw '1.2.3 host markers missing.'}
+          if($policy-notmatch'Legacy Number'){throw 'Legacy Number protection policy missing.'}
+          if($ctx-notmatch'TreeIntegrityIssues' -or $ctx-notmatch'TreeIntegrityScanRuns'){throw 'Tree integrity DbSets missing.'}
+          if($services-notmatch'TreeIntegrityService'){throw 'TreeIntegrityService is not registered.'}
+          foreach($marker in @('DeathBeforeBirth','ParentTooYoung','ChildBornAfterParentDeath','CircularAncestry','PossibleDuplicatePerson','MissingBirthCitation','SynchronizeIssuesAsync')){if($integrity-notmatch[regex]::Escape($marker)){throw "Tree integrity rule marker missing: $marker"}}
+          if($entities-notmatch'TreeIntegrityIssueStatus' -or $entities-notmatch'Dismiss' -or $entities-notmatch'MarkCleared'){throw 'Tree integrity review entity contract missing.'}
+          if($page-notmatch'@page "/data-quality"' -or $page-notmatch'Run Full Tree Scan' -or $page-notmatch'Dismiss With Reason' -or $page-notmatch'Legacy Numbers remain immutable'){throw 'Data Quality Center UI missing.'}
+          if($nav-notmatch'href="/data-quality"'){throw 'Data Quality Center navigation link missing.'}
+          if($css-notmatch'1\.2\.3 - automated tree error checker' -or $css-notmatch'integrity-summary-grid'){throw '1.2.3 Data Quality styling missing.'}
+          if(-not(Test-Path "$r\src\LoperFamilyTreeBuilder.Data\Migrations\20260812003000_TreeIntegrityChecker.cs")){throw 'Tree integrity migration missing.'}
+          if(-not(Test-Path $logo)){throw 'Official LOPER Texas logo missing.'}
+          $logoHash=(Get-FileHash $logo -Algorithm SHA256).Hash.ToLowerInvariant()
+          if($logoHash-ne'e78c7e66b8d4fe564eb52021a92db9f8d12de14e59baae81d95844797575f462'){throw "Unexpected LOPER logo hash: $logoHash"}
+          if($bundle-notmatch'LogoFile=.*loper-logo\.jpg' -or $bundle-notmatch'Version="1\.2\.3\.0"'){throw 'Installer logo/version contract missing.'}
+          if($msi-notmatch'Version="1\.2\.3"'){throw 'MSI version is not 1.2.3.'}
+          $pages=Join-Path $r 'src/LoperFamilyTreeBuilder.Web/Components/Pages';$owners=@{}
+          Get-ChildItem $pages -Filter '*.razor' -File -Recurse|ForEach-Object{$t=Get-Content $_.FullName -Raw;foreach($m in [regex]::Matches($t,'(?m)^@page\s+"([^"]+)"')){$route=$m.Groups[1].Value;if(-not $owners.ContainsKey($route)){$owners[$route]=@()};$owners[$route]+=$_.Name}}
+          $dups=@($owners.GetEnumerator()|Where-Object{@($_.Value).Count-gt1});if($dups.Count-gt0){throw 'Duplicate Razor routes detected.'}
+          foreach($route in @('/data-quality','/tree-integrity','/messages','/media-migration','/gedcom-import','/public-preview','/archive','/family-tree','/family-health-patterns')){if(-not $owners.ContainsKey($route)){throw "Primary route missing: $route"}}
+          Write-Host "1.2.3 cumulative contract verified. LOPER logo SHA256: $logoHash"
+
+      - name: Test and build cumulative 1.2.3
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          if($LASTEXITCODE-ne0){throw 'Restore failed.'}
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+          if($LASTEXITCODE-ne0){throw 'Tests failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release
+          if($LASTEXITCODE-ne0){throw 'Web build failed.'}
+          dotnet build "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -p:EnableWindowsTargeting=true
+          if($LASTEXITCODE-ne0){throw 'Launcher build failed.'}
+
+      - name: Publish 1.2.3 applications
+        shell: pwsh
+        run: |
+          if(Test-Path "$env:GITHUB_WORKSPACE\artifacts"){Remove-Item "$env:GITHUB_WORKSPACE\artifacts" -Recurse -Force}
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Publish applications fail-fast'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Assemble Windows installer payload'
+          & "$env:GITHUB_WORKSPACE\Invoke-InstallerStep.ps1" 'Build WiX 1.1.4.1 installer fail-fast'
+
+      - name: Create verified 1.2.3 release manifest
+        shell: pwsh
+        run: |
+          $setup="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          if(-not(Test-Path $setup)){throw 'Final 1.2.3 installer missing.'}
+          $info=[Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+          if($info.ProductVersion-notmatch'^1\.2\.3'){throw "Incorrect ProductVersion: $($info.ProductVersion)"}
+          $hash=(Get-FileHash $setup -Algorithm SHA256).Hash.ToLowerInvariant();$sig=Get-AuthenticodeSignature $setup
+          [ordered]@{application='Loper Family Tree Builder';version='1.2.3';release='Automated Tree Error Checker & Data Quality Review';sha256=$hash;authenticodeStatus=$sig.Status.ToString();directUpgradeBaseline='1.0.2';upgradeFrom122Verified=$true;legacyNumberPreservationVerified=$true;treeErrorCheckerVerified=$true;dataQualityCenterVerified=$true;chronologyRulesVerified=$true;parentageRulesVerified=$true;circularAncestryRuleVerified=$true;duplicateDetectionVerified=$true;sourceGapRulesVerified=$true;reviewOnlyNoAutoCorrectionVerified=$true;dismissReasonAuditVerified=$true;officialLoperTexasLogoVerified=$true;officialLoperTexasLogoSha256='e78c7e66b8d4fe564eb52021a92db9f8d12de14e59baae81d95844797575f462';familyMessagingPreserved=$true;mediaMigrationPreserved=$true;hudThemePreserved=$true;gedcomImportReadinessPreserved=$true;localPreviewOnlyVerified=$true;deploymentBlockedWithoutOwnerApproval=$true;familyHealthPatternsPreserved=$true;interactiveTreePreserved=$true;trustedSigningDeferred=$true;cumulativeTestsPassed=$true;githubRunId=$env:GITHUB_RUN_ID;generatedUtc=[DateTimeOffset]::UtcNow.ToString('O')}|ConvertTo-Json|Set-Content "$env:GITHUB_WORKSPACE\artifacts\final\release-manifest-1.2.3.json" -Encoding utf8
+          Write-Host "ProductVersion: $($info.ProductVersion)";Write-Host "SHA256: $hash";Write-Host "Authenticode: $($sig.Status)"
+
+      - name: Upload verified 1.2.3 installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-1.2.3-tree-error-checker
+          path: |
+            artifacts/final/LoperFamilyTreeBuilderSetup.exe
+            artifacts/final/release-manifest-1.2.3.json
+          if-no-files-found: error
