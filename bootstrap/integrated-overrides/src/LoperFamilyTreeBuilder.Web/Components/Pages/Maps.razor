@@ -1,3 +1,4 @@
+@page "/maps"
 @page "/maps/{PersonId:guid}"
 @rendermode InteractiveServer
 @inject LifeArchiveService Archive
@@ -5,7 +6,12 @@
 
 <PageTitle>Maps & Migration - Loper Family Tree Builder</PageTitle>
 
-@if (_profile is null)
+@if (PersonId == Guid.Empty)
+{
+    <div class="hud-page-header"><div><span class="hud-eyebrow">MAPS + LIFETIME MIGRATION</span><h1>Family Geography</h1><p>Select a person to review documented residences, military assignments, schools, work locations, cemeteries, travel, and other sourced places across their lifetime.</p></div><span class="hud-panel-code">PERSON-CENTERED</span></div>
+    <section class="page-card empty-state"><h2>Select a person first</h2><p>Open the People workspace, choose a person, then select Maps & Migration from the Person Command Profile.</p><a class="secondary-action" href="/people">Open People</a></section>
+}
+else if (_profile is null)
 {
     <section class="page-card">Loading geography workspace...</section>
 }
@@ -33,6 +39,12 @@ else
     private IReadOnlyList<MapPointRow> _points = [];
     protected override async Task OnParametersSetAsync()
     {
+        if (PersonId == Guid.Empty)
+        {
+            _profile = null;
+            _points = [];
+            return;
+        }
         _profile = await ProfileQuery.GetAsync(PersonId);
         if (_profile is not null) _points = await Archive.GetMapPointsAsync(PersonId);
     }
