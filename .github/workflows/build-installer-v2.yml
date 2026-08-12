@@ -1,16 +1,29 @@
-name: Build Loper Family Tree Builder Installer V2
+name: Build Loper Family Tree Builder Integrated Installer
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - agent/integrated-desktop-release
     paths:
       - '.github/workflows/build-installer-v2.yml'
       - 'bootstrap/overrides/**'
+      - 'bootstrap/integrated-overrides/**'
+      - 'docs/INTEGRATED-DESKTOP-RELEASE.md'
+      - 'docs/WEB-DATA-ARCHITECTURE.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integrated-desktop-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 75
 
     steps:
       - name: Checkout repository
@@ -68,6 +81,25 @@ jobs:
         run: |
           "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
+      - name: Integrated release preflight
+        shell: pwsh
+        run: |
+          $required = @(
+            "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj",
+            "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj",
+            "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj",
+            "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj",
+            "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj"
+          )
+
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              throw "Integrated release preflight failed: missing $path"
+            }
+          }
+
+          Write-Host 'Integrated release preflight passed.'
+
       - name: Apply non-blocking folder browser fix
         shell: pwsh
         run: |
@@ -75,6 +107,21 @@ jobs:
             "$env:GITHUB_WORKSPACE\bootstrap\overrides\FirstRunSetupForm.cs" `
             "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\FirstRunSetupForm.cs" `
             -Force
+
+      - name: Apply integrated release overrides
+        shell: pwsh
+        run: |
+          $overrideRoot = "$env:GITHUB_WORKSPACE\bootstrap\integrated-overrides"
+          if (Test-Path $overrideRoot) {
+            Get-ChildItem $overrideRoot -File -Recurse | ForEach-Object {
+              $relative = $_.FullName.Substring($overrideRoot.Length).TrimStart('\')
+              $destination = Join-Path $env:SOURCE_ROOT $relative
+              $destinationDirectory = Split-Path $destination -Parent
+              New-Item -ItemType Directory -Force $destinationDirectory | Out-Null
+              Copy-Item $_.FullName $destination -Force
+              Write-Host "Applied integrated override: $relative"
+            }
+          }
 
       - name: Use WiX 5 installer toolchain
         shell: pwsh
@@ -91,17 +138,17 @@ jobs:
           $setupText = $setupText.Replace('WixToolset.Bal.wixext" Version="7.0.0', 'WixToolset.Bal.wixext" Version="5.0.0')
           Set-Content -Path $setupProject -Value $setupText -Encoding utf8
 
-      - name: Set V2 installer version
+      - name: Set integrated preview installer version
         shell: pwsh
         run: |
           $packagePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
           $packageText = Get-Content $packagePath -Raw
-          $packageText = $packageText.Replace('Version="1.0.0"', 'Version="1.0.1"')
+          $packageText = $packageText.Replace('Version="1.0.0"', 'Version="1.1.0"')
           Set-Content -Path $packagePath -Value $packageText -Encoding utf8
 
           $bundlePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
           $bundleText = Get-Content $bundlePath -Raw
-          $bundleText = $bundleText.Replace('Version="1.0.0.0"', 'Version="1.0.1.0"')
+          $bundleText = $bundleText.Replace('Version="1.0.0.0"', 'Version="1.1.0.0"')
           Set-Content -Path $bundlePath -Value $bundleText -Encoding utf8
 
       - name: Fix WiX shortcut component scope
@@ -254,18 +301,31 @@ jobs:
             -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" `
             -o "$env:GITHUB_WORKSPACE\artifacts\setup"
 
-      - name: Stage final installer
+      - name: Stage and verify final installer
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\final" | Out-Null
-          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe" `
-            "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe" `
-            -Force
-          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe" -Algorithm SHA256
+          $source = "$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe"
+          $destination = "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
 
-      - name: Upload installer artifact
+          if (-not (Test-Path $source)) {
+            throw 'Single EXE installer was not produced.'
+          }
+
+          Copy-Item $source $destination -Force
+          $installer = Get-Item $destination
+          if ($installer.Length -lt 1MB) {
+            throw "Installer is unexpectedly small: $($installer.Length) bytes"
+          }
+
+          $hash = Get-FileHash $destination -Algorithm SHA256
+          Write-Host "Installer size: $($installer.Length) bytes"
+          Write-Host "Installer SHA256: $($hash.Hash)"
+
+      - name: Upload integrated installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LoperFamilyTreeBuilderSetup-V2
+          name: LoperFamilyTreeBuilderSetup-IntegratedPreview
           path: artifacts/final/LoperFamilyTreeBuilderSetup.exe
           if-no-files-found: error
+          retention-days: 7
