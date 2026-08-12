@@ -67,7 +67,6 @@ jobs:
           Set-Content -Path "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\GlobalUsings.cs" -Value 'global using Xunit;' -Encoding utf8
           $imports="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\_Imports.razor"
           if((Get-Content $imports -Raw) -notmatch 'RenderMode'){Add-Content $imports '@using static Microsoft.AspNetCore.Components.Web.RenderMode'}
-          foreach($file in @('Home.razor','People.razor','AddPerson.razor')){Write-Host "Compatibility source retained: $file"}
 
       - name: Run preservation tests
         shell: pwsh
@@ -78,12 +77,12 @@ jobs:
       - name: Apply Razor compatibility fixes
         shell: pwsh
         run: |
-          $home="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Home.razor"
-          $t=Get-Content $home -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); $t=$t.Replace('    private void OpenPeopleSearch()',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private void OpenPeopleSearch()"); Set-Content $home $t
-          $people="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\People.razor"
-          $t=Get-Content $people -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); $t=$t.Replace('    private static string FormatDate(DateOnly? date)',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private static string FormatDate(DateOnly? date)"); Set-Content $people $t
-          $add="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\AddPerson.razor"
-          $t=Get-Content $add -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people")"','@onclick="Cancel"'); $t=$t.Replace('    private CreatePersonRequest ToRequest()',"    private void Cancel()`r`n    {`r`n        Navigation.NavigateTo(`"/people`");`r`n    }`r`n`r`n    private CreatePersonRequest ToRequest()"); Set-Content $add $t
+          $homePage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Home.razor"
+          $t=Get-Content $homePage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); $t=$t.Replace('    private void OpenPeopleSearch()',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private void OpenPeopleSearch()"); Set-Content $homePage $t
+          $peoplePage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\People.razor"
+          $t=Get-Content $peoplePage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); $t=$t.Replace('    private static string FormatDate(DateOnly? date)',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private static string FormatDate(DateOnly? date)"); Set-Content $peoplePage $t
+          $addPage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\AddPerson.razor"
+          $t=Get-Content $addPage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people")"','@onclick="Cancel"'); $t=$t.Replace('    private CreatePersonRequest ToRequest()',"    private void Cancel()`r`n    {`r`n        Navigation.NavigateTo(`"/people`");`r`n    }`r`n`r`n    private CreatePersonRequest ToRequest()"); Set-Content $addPage $t
 
       - name: Publish payload
         shell: pwsh
@@ -114,7 +113,10 @@ jobs:
           $package="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
           $text=Get-Content $package -Raw
           $text=[regex]::Replace($text,'Version="[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.1"',1)
-          if($text -notmatch '<MajorUpgrade\b'){$text=$text.Replace('</Package>','  <MajorUpgrade DowngradeErrorMessage="A newer version of Loper Family Tree Builder is already installed." />`r`n</Package>')}
+          if($text -notmatch '<MajorUpgrade\b'){
+            $replacement='  <MajorUpgrade DowngradeErrorMessage="A newer version of Loper Family Tree Builder is already installed." />' + "`r`n</Package>"
+            $text=$text.Replace('</Package>',$replacement)
+          }
           Set-Content $package $text -Encoding utf8
           $bundle="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
           $b=Get-Content $bundle -Raw
