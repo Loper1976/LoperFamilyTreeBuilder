@@ -1,0 +1,147 @@
+@page "/data-quality"
+@page "/tree-integrity"
+@rendermode InteractiveServer
+@attribute [Authorize(Policy = "ArchiveAdmin")]
+@inject TreeIntegrityService Integrity
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Data Quality Center - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header modern-page-header hud-page-header">
+    <div>
+        <div class="page-eyebrow">Genealogy Integrity Command Center</div>
+        <h1>Data Quality Center</h1>
+        <p>Scan chronology, relationships, duplicate candidates and source gaps. Findings are review items only. The checker never silently changes historical data or Robert J. Loper Legacy Numbers.</p>
+    </div>
+    <div class="page-header-actions">
+        <span class="hud-status-chip"><i></i> REVIEW ONLY</span>
+        <button class="primary-action" @onclick="RunScanAsync" disabled="@_scanning">@(_scanning ? "Scanning Tree…" : "Run Full Tree Scan")</button>
+    </div>
+</div>
+
+@if(!string.IsNullOrWhiteSpace(_error)){<div class="alert alert-danger">@_error</div>}
+@if(!string.IsNullOrWhiteSpace(_message)){<div class="alert alert-success">@_message</div>}
+
+@if(_dashboard is not null)
+{
+    <section class="integrity-summary-grid">
+        <button class="integrity-summary-card total" @onclick="()=>SetSeverityAsync(null)"><span>ACTIVE FINDINGS</span><strong>@_dashboard.Summary.ActiveTotal</strong><small>All unresolved scan findings</small></button>
+        <button class="integrity-summary-card critical" @onclick="()=>SetSeverityAsync(TreeIntegritySeverity.Critical)"><span>CRITICAL</span><strong>@_dashboard.Summary.Critical</strong><small>Logical impossibilities</small></button>
+        <button class="integrity-summary-card high" @onclick="()=>SetSeverityAsync(TreeIntegritySeverity.High)"><span>HIGH</span><strong>@_dashboard.Summary.High</strong><small>Highly improbable records</small></button>
+        <button class="integrity-summary-card medium" @onclick="()=>SetSeverityAsync(TreeIntegritySeverity.Medium)"><span>MEDIUM</span><strong>@_dashboard.Summary.Medium</strong><small>Needs research review</small></button>
+        <button class="integrity-summary-card low" @onclick="()=>SetSeverityAsync(TreeIntegritySeverity.Low)"><span>LOW</span><strong>@_dashboard.Summary.Low</strong><small>Incomplete or unsourced</small></button>
+        <button class="integrity-summary-card info" @onclick="()=>SetSeverityAsync(TreeIntegritySeverity.Informational)"><span>INFO</span><strong>@_dashboard.Summary.Informational</strong><small>Research prompts</small></button>
+    </section>
+
+    <section class="page-card integrity-control-card">
+        <div class="integrity-scan-status">
+            <div><span>RULE SET</span><strong>@_dashboard.Summary.RulesVersion</strong></div>
+            <div><span>LAST SCAN</span><strong>@(_dashboard.Summary.LastScanUtc?.ToLocalTime().ToString("g") ?? "Not run")</strong></div>
+            <div><span>SCAN TIME</span><strong>@FormatDuration(_dashboard.Summary.LastScanDurationMilliseconds)</strong></div>
+            <div><span>REVIEW HISTORY</span><strong>@_dashboard.Summary.Dismissed dismissed · @_dashboard.Summary.Resolved resolved</strong></div>
+        </div>
+        <div class="integrity-filter-grid">
+            <label class="grow-field">Search<input @bind="_filter.Search" @bind:event="oninput" placeholder="Person, issue, evidence…" /></label>
+            <label>Severity<select @bind="_severityText"><option value="">All severities</option>@foreach(var value in Enum.GetValues<TreeIntegritySeverity>()){<option value="@value">@Format(value)</option>}</select></label>
+            <label>Status<select @bind="_statusText"><option value="">All statuses</option>@foreach(var value in Enum.GetValues<TreeIntegrityIssueStatus>()){<option value="@value">@Format(value)</option>}</select></label>
+            <label>Issue type<select @bind="_typeText"><option value="">All issue types</option>@foreach(var value in Enum.GetValues<TreeIntegrityIssueType>()){<option value="@value">@Format(value)</option>}</select></label>
+            <label class="integrity-checkbox"><input type="checkbox" @bind="_filter.ActiveOnly" /> Active only</label>
+            <button class="secondary-action" @onclick="ApplyFiltersAsync">Apply</button>
+            <button class="secondary-action" @onclick="ClearFiltersAsync">Clear</button>
+        </div>
+    </section>
+
+    <section class="page-card integrity-findings-card">
+        <div class="section-heading-row"><div><div class="page-eyebrow">Review Queue</div><h2>Tree integrity findings</h2><p>@_dashboard.Issues.TotalCount matching issue(s). Select a finding to review the evidence and record a decision.</p></div></div>
+        @if(_dashboard.Issues.Items.Count == 0)
+        {
+            <div class="integrity-empty"><strong>No findings match this view.</strong><span>Run a scan or change the filters.</span></div>
+        }
+        else
+        {
+            <div class="integrity-findings-list">
+            @foreach(var issue in _dashboard.Issues.Items)
+            {
+                <article class="integrity-finding severity-@issue.Severity.ToString().ToLowerInvariant() @(issue.IssueId==_selectedIssueId?"selected":"")" @onclick="()=>SelectIssue(issue)">
+                    <div class="integrity-severity-rail"></div>
+                    <div class="integrity-finding-main">
+                        <div class="integrity-finding-head"><div><span class="integrity-severity-pill @issue.Severity.ToString().ToLowerInvariant()">@Format(issue.Severity)</span><span class="integrity-type">@Format(issue.IssueType)</span></div><span class="integrity-status @issue.Status.ToString().ToLowerInvariant()">@Format(issue.Status)</span></div>
+                        <h3>@issue.Title</h3>
+                        <p>@issue.Description</p>
+                        <div class="integrity-person-line">
+                            @if(issue.PersonId.HasValue){<a href="@($"/people/{issue.PersonId}")" @onclick:stopPropagation="true"><strong>@issue.PersonName</strong>@if(!string.IsNullOrWhiteSpace(issue.LegacyNumber)){<span>Legacy # @issue.LegacyNumber</span>}</a>}
+                            @if(issue.RelatedPersonId.HasValue){<span class="integrity-link-arrow">↔</span><a href="@($"/people/{issue.RelatedPersonId}")" @onclick:stopPropagation="true"><strong>@issue.RelatedPersonName</strong>@if(!string.IsNullOrWhiteSpace(issue.RelatedLegacyNumber)){<span>Legacy # @issue.RelatedLegacyNumber</span>}</a>}
+                        </div>
+                        <div class="integrity-evidence"><span>EVIDENCE</span>@issue.EvidenceSummary</div>
+                        @if(!string.IsNullOrWhiteSpace(issue.ReviewReason)){<div class="integrity-review-history"><strong>@Format(issue.Status):</strong> @issue.ReviewReason @if(!string.IsNullOrWhiteSpace(issue.ReviewedBy)){<span>· @issue.ReviewedBy</span>}</div>}
+                    </div>
+                    <time>@issue.LastDetectedUtc.ToLocalTime().ToString("g")</time>
+                </article>
+            }
+            </div>
+            <div class="archive-pagination integrity-pagination"><button class="secondary-action" disabled="@(!_dashboard.Issues.HasPreviousPage)" @onclick="PreviousPageAsync">Previous</button><span>Page @_dashboard.Issues.Page of @_dashboard.Issues.TotalPages</span><button class="secondary-action" disabled="@(!_dashboard.Issues.HasNextPage)" @onclick="NextPageAsync">Next</button></div>
+        }
+    </section>
+
+    @if(SelectedIssue is not null)
+    {
+        <section class="page-card integrity-review-panel">
+            <div><div class="page-eyebrow">Human Review Required</div><h2>@SelectedIssue.Title</h2><p>The checker only flags the record. Any genealogy correction must be made separately from the person, relationship or source workspace.</p></div>
+            <label>Review note / dismissal reason<textarea @bind="_reviewReason" rows="4" placeholder="Record why this issue is valid, resolved, or intentionally dismissed…"></textarea></label>
+            <div class="integrity-review-actions">
+                @if(SelectedIssue.PersonId.HasValue){<a class="secondary-action inline-link-button" href="@($"/people/{SelectedIssue.PersonId}")">Review Person</a>}
+                <a class="secondary-action inline-link-button" href="/sources">Review Sources</a>
+                <button class="secondary-action" @onclick="ResolveSelectedAsync">Mark Reviewed / Resolved</button>
+                <button class="secondary-action" @onclick="DismissSelectedAsync">Dismiss With Reason</button>
+                @if(SelectedIssue.Status != TreeIntegrityIssueStatus.Open){<button class="secondary-action" @onclick="ReopenSelectedAsync">Reopen</button>}
+            </div>
+        </section>
+    }
+
+    <section class="page-card integrity-rules-card">
+        <div class="page-eyebrow">Active Rule Families</div><h2>What the checker reviews</h2>
+        <div class="integrity-rule-grid">
+            <div><strong>Chronology</strong><span>Death before birth, relationship dates, burial dates and military dates.</span></div>
+            <div><strong>Parentage</strong><span>Parental age, births after parent death, duplicate links and circular ancestry.</span></div>
+            <div><strong>Duplicates</strong><span>Possible duplicate people, duplicate Legacy Numbers and duplicate timeline events.</span></div>
+            <div><strong>Evidence</strong><span>Birth/death citation gaps and incomplete core dates.</span></div>
+            <div><strong>Research prompts</strong><span>Single-parent links and other incomplete but potentially valid historical records.</span></div>
+            <div><strong>Protection</strong><span>All findings are proposal/review only. Legacy Numbers remain immutable.</span></div>
+        </div>
+    </section>
+}
+else
+{
+    <section class="page-card"><p>Loading data quality workspace…</p></section>
+}
+
+@code {
+    private TreeIntegrityDashboard? _dashboard;
+    private readonly TreeIntegrityFilterRequest _filter = new(){PageSize=50,ActiveOnly=true};
+    private bool _scanning;
+    private string _actor="Project owner";
+    private string _error=string.Empty;
+    private string _message=string.Empty;
+    private string _severityText=string.Empty;
+    private string _statusText=string.Empty;
+    private string _typeText=string.Empty;
+    private Guid? _selectedIssueId;
+    private string _reviewReason=string.Empty;
+    private TreeIntegrityIssueListItem? SelectedIssue => _dashboard?.Issues.Items.FirstOrDefault(x=>x.IssueId==_selectedIssueId);
+
+    protected override async Task OnInitializedAsync(){var state=await AuthenticationStateProvider.GetAuthenticationStateAsync();_actor=state.User.Identity?.Name??"Project owner";await LoadAsync();}
+    private async Task LoadAsync(){_error=string.Empty;try{_dashboard=await Integrity.GetDashboardAsync(_filter);}catch(Exception ex){_error=ex.Message;}}
+    private async Task RunScanAsync(){_scanning=true;_error=_message=string.Empty;try{var result=await Integrity.RunScanAsync(_actor);_message=$"Tree scan complete: {result.TotalFindings} active finding(s), including {result.Critical} critical and {result.High} high severity. No genealogy data was changed.";_filter.Page=1;await LoadAsync();}catch(Exception ex){_error=ex.Message;}finally{_scanning=false;}}
+    private async Task ApplyFiltersAsync(){_filter.Page=1;_filter.Severity=Parse<TreeIntegritySeverity>(_severityText);_filter.Status=Parse<TreeIntegrityIssueStatus>(_statusText);_filter.IssueType=Parse<TreeIntegrityIssueType>(_typeText);await LoadAsync();}
+    private async Task ClearFiltersAsync(){_filter.Search=string.Empty;_filter.Severity=null;_filter.Status=null;_filter.IssueType=null;_filter.ActiveOnly=true;_filter.Page=1;_severityText=_statusText=_typeText=string.Empty;_selectedIssueId=null;await LoadAsync();}
+    private async Task SetSeverityAsync(TreeIntegritySeverity? severity){_filter.Severity=severity;_severityText=severity?.ToString()??string.Empty;_filter.Page=1;await LoadAsync();}
+    private void SelectIssue(TreeIntegrityIssueListItem issue){_selectedIssueId=issue.IssueId;_reviewReason=issue.ReviewReason;}
+    private async Task DismissSelectedAsync(){if(!_selectedIssueId.HasValue)return;if(string.IsNullOrWhiteSpace(_reviewReason)){_error="Enter a reason before dismissing a genealogy integrity finding.";return;}await Integrity.DismissIssueAsync(_selectedIssueId.Value,_reviewReason,_actor);_message="Finding dismissed with its review reason preserved.";await LoadAsync();}
+    private async Task ResolveSelectedAsync(){if(!_selectedIssueId.HasValue)return;await Integrity.ResolveIssueAsync(_selectedIssueId.Value,_reviewReason,_actor);_message="Finding marked reviewed/resolved. A future scan will reopen it if the condition still exists.";await LoadAsync();}
+    private async Task ReopenSelectedAsync(){if(!_selectedIssueId.HasValue)return;await Integrity.ReopenIssueAsync(_selectedIssueId.Value,_actor);_message="Finding reopened for research.";await LoadAsync();}
+    private async Task PreviousPageAsync(){if(_dashboard?.Issues.HasPreviousPage==true){_filter.Page--;await LoadAsync();}}
+    private async Task NextPageAsync(){if(_dashboard?.Issues.HasNextPage==true){_filter.Page++;await LoadAsync();}}
+    private static T? Parse<T>(string value) where T:struct,Enum=>Enum.TryParse<T>(value,out var parsed)?parsed:null;
+    private static string Format(Enum value)=>string.Concat(value.ToString().Select((c,i)=>i>0&&char.IsUpper(c)?" "+c:c.ToString()));
+    private static string FormatDuration(long? ms)=>ms.HasValue?$"{ms.Value:N0} ms":"—";
+}
