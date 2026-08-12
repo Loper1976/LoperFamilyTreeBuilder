@@ -1,0 +1,302 @@
+@page "/people"
+@rendermode InteractiveServer
+@inject PeopleQueryService PeopleQuery
+@inject FamilyBranchQueryService BranchQuery
+@inject NavigationManager Navigation
+
+<PageTitle>People - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">CORE GENEALOGY WORKSPACE</div>
+        <h1>People</h1>
+        <p>Search the archive quickly, preserve historical identifiers, and open a complete person command profile.</p>
+    </div>
+    <button class="primary-action" @onclick="AddPerson">Add Person</button>
+</div>
+
+<section class="people-command-strip">
+    <div class="people-command-main">
+        <label>Archive search</label>
+        <input @bind="_request.SearchText"
+               @bind:event="oninput"
+               placeholder="Name, Legacy Number, or identifier" />
+    </div>
+    <button class="primary-action" @onclick="SearchAsync">Search</button>
+    <button class="secondary-action" @onclick="ClearAsync">Reset</button>
+</section>
+
+<section class="people-metrics">
+    <div class="people-metric"><span>Matching records</span><strong>@(_result?.TotalCount ?? 0)</strong></div>
+    <div class="people-metric"><span>Page records</span><strong>@(_result?.Items.Count ?? 0)</strong></div>
+    <div class="people-metric"><span>Living on page</span><strong>@CurrentPageLiving</strong></div>
+    <div class="people-metric"><span>Legacy IDs on page</span><strong>@CurrentPageWithLegacy</strong></div>
+</section>
+
+<section class="page-card people-filter-card">
+    <div class="hud-panel-header">
+        <div>
+            <span class="hud-eyebrow">PRECISION FILTERS</span>
+            <h2>Archive controls</h2>
+        </div>
+        <span class="hud-status-pill hud-status-protected"><i></i>LEGACY NUMBERS READ ONLY</span>
+    </div>
+
+    <div class="people-filter-grid people-filter-grid-expanded">
+        <div>
+            <label>Surname</label>
+            <input @bind="_request.Surname" @bind:event="oninput" placeholder="Starts with..." />
+        </div>
+        <div>
+            <label>Legacy Number</label>
+            <input @bind="_request.LegacyNumberPrefix" @bind:event="oninput" placeholder="Exact or prefix" />
+        </div>
+        <div>
+            <label>Family Branch</label>
+            <select @bind="_selectedBranch">
+                <option value="">All branches</option>
+                @foreach (var branch in _branches)
+                {
+                    <option value="@branch.Id">@branch.Name</option>
+                }
+            </select>
+        </div>
+        <div>
+            <label>Status</label>
+            <select @bind="_request.LivingStatus">
+                <option value="@LivingStatusFilter.All">All people</option>
+                <option value="@LivingStatusFilter.Living">Living</option>
+                <option value="@LivingStatusFilter.Deceased">Deceased</option>
+            </select>
+        </div>
+        <div>
+            <label>Sort</label>
+            <select @bind="_request.SortBy">
+                <option value="surname">Surname</option>
+                <option value="given">Given name</option>
+                <option value="birth">Birth date</option>
+            </select>
+        </div>
+        <div>
+            <label>Page size</label>
+            <select @bind="_request.PageSize">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="people-filter-footer">
+        <div class="people-quick-filters">
+            <button class="secondary-action" @onclick="ShowAllAsync">All</button>
+            <button class="secondary-action" @onclick="ShowLivingAsync">Living</button>
+            <button class="secondary-action" @onclick="ShowDeceasedAsync">Deceased</button>
+        </div>
+        <label class="people-sort-direction">
+            <input type="checkbox" @bind="_request.Descending" />
+            Descending sort
+        </label>
+        <div class="people-view-toggle">
+            <button class="secondary-action @(_viewMode == "table" ? "selected" : string.Empty)" @onclick="ShowTable">Table</button>
+            <button class="secondary-action @(_viewMode == "cards" ? "selected" : string.Empty)" @onclick="ShowCards">Cards</button>
+        </div>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <section class="page-card people-loading">Scanning archive...</section>
+}
+else if (_result is null || _result.TotalCount == 0)
+{
+    <section class="page-card empty-state">
+        <h2>No people found</h2>
+        <p>Adjust the filters or add a person. Existing historical identifiers are never renumbered during search or display.</p>
+    </section>
+}
+else if (_viewMode == "cards")
+{
+    <section class="person-card-grid">
+        @foreach (var person in _result.Items)
+        {
+            <a class="person-command-card" href="@($"/people/{person.Id}")">
+                <div class="person-card-topline">
+                    <span>@(person.IsLiving ? "LIVING" : "DECEASED")</span>
+                    <span>@(string.IsNullOrWhiteSpace(person.LegacyNumber) ? "NO LEGACY ID" : "LEGACY PROTECTED")</span>
+                </div>
+                <h2>@person.DisplayName</h2>
+                <div class="person-card-legacy">@(person.LegacyNumber ?? "No Legacy Number")</div>
+                <div class="person-card-data">
+                    <span><b>Born</b>@FormatLifeDate(person.BirthDate)</span>
+                    <span><b>Died</b>@FormatLifeDate(person.DeathDate)</span>
+                    <span><b>Branch</b>@(person.PrimaryBranchName ?? "Unassigned")</span>
+                </div>
+                <div class="person-card-open">OPEN COMMAND PROFILE →</div>
+            </a>
+        }
+    </section>
+    <div class="pagination">
+        <button class="secondary-action" disabled="@(!_result.HasPreviousPage)" @onclick="PreviousPageAsync">Previous</button>
+        <span>Page @_result.Page of @_result.TotalPages</span>
+        <button class="secondary-action" disabled="@(!_result.HasNextPage)" @onclick="NextPageAsync">Next</button>
+    </div>
+}
+else
+{
+    <section class="page-card people-table-card">
+        <div class="table-toolbar">
+            <div><strong>@_result.TotalCount</strong> people found</div>
+            <div>Page @_result.Page of @_result.TotalPages</div>
+        </div>
+        <div class="table-scroll">
+            <table class="people-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Legacy Number</th>
+                        <th>Branch</th>
+                        <th>Born</th>
+                        <th>Died</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var person in _result.Items)
+                    {
+                        <tr>
+                            <td><a href="@($"/people/{person.Id}")">@person.DisplayName</a></td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(person.LegacyNumber))
+                                {
+                                    <span class="legacy-number">@person.LegacyNumber</span>
+                                }
+                                else
+                                {
+                                    <span class="people-muted">Not assigned</span>
+                                }
+                            </td>
+                            <td>@(person.PrimaryBranchName ?? "Unassigned")</td>
+                            <td>@FormatLifeDate(person.BirthDate)</td>
+                            <td>@FormatLifeDate(person.DeathDate)</td>
+                            <td><span class="status-pill">@(person.IsLiving ? "Living" : "Deceased")</span></td>
+                            <td><a class="people-open-link" href="@($"/people/{person.Id}")">OPEN →</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        <div class="pagination">
+            <button class="secondary-action" disabled="@(!_result.HasPreviousPage)" @onclick="PreviousPageAsync">Previous</button>
+            <span>Page @_result.Page of @_result.TotalPages</span>
+            <button class="secondary-action" disabled="@(!_result.HasNextPage)" @onclick="NextPageAsync">Next</button>
+        </div>
+    </section>
+}
+
+@code {
+    private PeopleSearchRequest _request = new();
+    private PagedResult<PersonListItem>? _result;
+    private IReadOnlyList<FamilyBranchListItem> _branches = [];
+    private bool _loading;
+    private string _selectedBranch = string.Empty;
+    private string _viewMode = "table";
+
+    private int CurrentPageLiving => _result?.Items.Count(person => person.IsLiving) ?? 0;
+    private int CurrentPageWithLegacy => _result?.Items.Count(person => !string.IsNullOrWhiteSpace(person.LegacyNumber)) ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await BranchQuery.GetAllAsync();
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _loading = true;
+        try
+        {
+            _request.Page = 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        _request = new PeopleSearchRequest();
+        _selectedBranch = string.Empty;
+        await SearchAsync();
+    }
+
+    private async Task ShowAllAsync()
+    {
+        _request.LivingStatus = LivingStatusFilter.All;
+        await SearchAsync();
+    }
+
+    private async Task ShowLivingAsync()
+    {
+        _request.LivingStatus = LivingStatusFilter.Living;
+        await SearchAsync();
+    }
+
+    private async Task ShowDeceasedAsync()
+    {
+        _request.LivingStatus = LivingStatusFilter.Deceased;
+        await SearchAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_result is null || !_result.HasPreviousPage)
+            return;
+
+        _loading = true;
+        try
+        {
+            _request.Page = _result.Page - 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_result is null || !_result.HasNextPage)
+            return;
+
+        _loading = true;
+        try
+        {
+            _request.Page = _result.Page + 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyBranchFilter()
+    {
+        _request.FamilyBranchId = Guid.TryParse(_selectedBranch, out var branchId)
+            ? branchId
+            : null;
+    }
+
+    private void AddPerson() => Navigation.NavigateTo("/people/add");
+    private void ShowTable() => _viewMode = "table";
+    private void ShowCards() => _viewMode = "cards";
+    private static string FormatLifeDate(DateOnly? date) => date?.ToString("MMM d, yyyy") ?? "—";
+}
