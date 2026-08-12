@@ -1,0 +1,308 @@
+@page "/dna-clusters"
+@rendermode InteractiveServer
+@using LoperFamilyTreeBuilder.Core.Entities
+@using LoperFamilyTreeBuilder.Core.Models
+@using LoperFamilyTreeBuilder.Data.Services
+@inject DnaMatchService DnaMatches
+
+<PageTitle>DNA Match Clusters - Loper Family Tree Builder</PageTitle>
+
+<div class="hud-page-heading">
+    <div>
+        <div class="hud-eyebrow">PRIVATE GENETIC RESEARCH</div>
+        <h1>DNA Match Clusters</h1>
+        <p>Group shared-match networks for research without automatically declaring biological relationships or rewriting the family tree.</p>
+    </div>
+    <span class="hud-status-pill hud-status-protected">DNA RESTRICTED</span>
+</div>
+
+<section class="page-card">
+    <div class="hud-panel-header">
+        <div><div class="hud-eyebrow">SAFETY BOUNDARY</div><h2>Clusters are research evidence, not conclusions</h2></div>
+        <span class="hud-panel-code">HUMAN REVIEW REQUIRED</span>
+    </div>
+    <p>Network groups are calculated only from recorded shared-match links. The system does not infer parentage, expose a hidden relationship, merge a DNA match into a person, or assign an ancestral line automatically. An ancestral-line label appears on a whole cluster only after every member has been manually reviewed with the same label.</p>
+</section>
+
+@if (_loading)
+{
+    <section class="page-card">Loading DNA research workspace...</section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <section class="page-card alert alert-error">@_error</section>
+}
+else
+{
+    @if (_dashboard is not null)
+    {
+        <div class="summary-grid hud-summary-grid">
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>MATCHES</span><i></i></div><div class="summary-value">@_dashboard.VisibleMatches</div><div class="summary-label">Private DNA matches</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>LINKS</span><i></i></div><div class="summary-value">@_dashboard.SharedMatchLinks</div><div class="summary-label">Shared-match evidence</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>CLUSTERS</span><i></i></div><div class="summary-value">@_dashboard.NetworkClusters</div><div class="summary-label">Network groups</div></div>
+            <div class="summary-card hud-stat-card"><div class="hud-stat-topline"><span>REVIEWED</span><i></i></div><div class="summary-value">@_dashboard.ReviewedMatches</div><div class="summary-label">Human-reviewed matches</div></div>
+        </div>
+    }
+
+    <div class="hud-dashboard-grid">
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">MATCH INTAKE</div><h2>Add DNA match</h2></div></div>
+            <div class="form-grid">
+                <label>Provider<input @bind="_provider" placeholder="AncestryDNA, 23andMe, MyHeritage..." /></label>
+                <label>Provider match ID<input @bind="_externalId" placeholder="Stable provider identifier" /></label>
+                <label>Display name<input @bind="_displayName" placeholder="Match display name" /></label>
+                <label>Total shared cM<input @bind="_totalCmText" placeholder="Example: 87.4" /></label>
+                <label>Shared segments<input @bind="_segmentsText" placeholder="Optional" /></label>
+            </div>
+            <div class="action-row"><button class="primary-action" @onclick="AddMatchAsync" disabled="@_busy">Add private match</button></div>
+            <p class="hud-inline-note">New DNA records default to owner-only visibility. Provider exports can be mapped into the same protected import model without auto-merging duplicate identifiers.</p>
+        </section>
+
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">NETWORK EVIDENCE</div><h2>Record shared-match link</h2></div></div>
+            <div class="form-grid">
+                <label>
+                    First match
+                    <select @bind="_firstMatchId">
+                        <option value="">Select match</option>
+                        @foreach (var match in _matches)
+                        {
+                            <option value="@match.Id">@match.DisplayName (@match.TotalCentimorgans.ToString("0.##") cM)</option>
+                        }
+                    </select>
+                </label>
+                <label>
+                    Second match
+                    <select @bind="_secondMatchId">
+                        <option value="">Select match</option>
+                        @foreach (var match in _matches)
+                        {
+                            <option value="@match.Id">@match.DisplayName (@match.TotalCentimorgans.ToString("0.##") cM)</option>
+                        }
+                    </select>
+                </label>
+                <label class="form-grid-wide">Evidence source<input @bind="_evidenceSource" placeholder="Provider shared-match list, imported file, research note..." /></label>
+            </div>
+            <div class="action-row"><button class="secondary-action" @onclick="AddSharedMatchAsync" disabled="@_busy">Add evidence link</button></div>
+        </section>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_notice))
+    {
+        <section class="page-card"><p class="hud-inline-note">@_notice</p></section>
+    }
+
+    <section class="page-card">
+        <div class="hud-panel-header"><div><div class="hud-eyebrow">PRIVATE MATCH REGISTER</div><h2>DNA matches</h2></div><span class="hud-panel-code">@_matches.Count RECORDS</span></div>
+        @if (_matches.Count == 0)
+        {
+            <p>No DNA matches have been added yet.</p>
+        }
+        else
+        {
+            <div class="table-scroll">
+                <table class="people-table">
+                    <thead><tr><th>Match</th><th>Provider</th><th>Shared DNA</th><th>Review</th><th>Visibility</th><th>Manual line</th><th></th></tr></thead>
+                    <tbody>
+                    @foreach (var match in _matches)
+                    {
+                        <tr>
+                            <td><strong>@match.DisplayName</strong><br /><small>@match.ExternalMatchId</small></td>
+                            <td>@match.ProviderName</td>
+                            <td>@match.TotalCentimorgans.ToString("0.##") cM@if (match.SharedSegments.HasValue) { <br /><small>@match.SharedSegments segments</small> }</td>
+                            <td>@match.ReviewStatus</td>
+                            <td>@match.Visibility</td>
+                            <td>@(string.IsNullOrWhiteSpace(match.ManualAncestralLineLabel) ? "Unassigned" : match.ManualAncestralLineLabel)</td>
+                            <td><button class="secondary-action" @onclick="() => SelectReview(match.Id)">Review</button></td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    @if (_reviewMatch is not null)
+    {
+        <section class="page-card">
+            <div class="hud-panel-header"><div><div class="hud-eyebrow">HUMAN EVIDENCE REVIEW</div><h2>@_reviewMatch.DisplayName</h2></div><span class="hud-panel-code">NO AUTO-INFERENCE</span></div>
+            <div class="form-grid">
+                <label class="form-grid-wide">Manual ancestral-line label<input @bind="_manualLine" placeholder="Only enter a line when research evidence supports it" /></label>
+                <label class="form-grid-wide">Research notes<textarea @bind="_researchNotes" rows="5" placeholder="Sources, triangulation notes, known relatives, uncertainty, next research step..."></textarea></label>
+                <label>
+                    Visibility
+                    <select @bind="_reviewVisibility">
+                        <option value="@DnaMatchVisibility.OwnerOnly">Owner only</option>
+                        <option value="@DnaMatchVisibility.DnaAuthorized">DNA-authorized users</option>
+                    </select>
+                </label>
+            </div>
+            <div class="action-row"><button class="primary-action" @onclick="SaveReviewAsync" disabled="@_busy">Save human review</button></div>
+        </section>
+    }
+
+    <section class="page-card">
+        <div class="hud-panel-header"><div><div class="hud-eyebrow">NETWORK CLUSTER VIEW</div><h2>Shared-match communities</h2></div><span class="hud-panel-code">EVIDENCE GRAPH</span></div>
+        @if (_clusters is null || _clusters.Clusters.Count == 0)
+        {
+            <p>Add shared-match links between DNA matches to form research clusters. Matches without evidence links remain unclustered.</p>
+        }
+        else
+        {
+            <div class="dna-cluster-grid">
+                @foreach (var cluster in _clusters.Clusters)
+                {
+                    <article class="dna-cluster-card">
+                        <div class="dna-cluster-title"><strong>@cluster.DisplayLabel</strong><span>@cluster.MatchCount matches</span></div>
+                        <div class="dna-cluster-meter">@cluster.EvidenceLinkCount evidence links · @cluster.NetworkDensity.ToString("P0") network density</div>
+                        <div class="dna-node-grid">
+                            @foreach (var member in cluster.Members)
+                            {
+                                <div class="dna-node">
+                                    <strong>@member.DisplayName</strong>
+                                    <span>@member.TotalCentimorgans.ToString("0.##") cM · @member.SharedConnections links</span>
+                                    @if (!string.IsNullOrWhiteSpace(member.ManualAncestralLineLabel))
+                                    {
+                                        <small>Reviewed: @member.ManualAncestralLineLabel</small>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        }
+
+        @if (_clusters is not null && _clusters.UnclusteredMatches.Count > 0)
+        {
+            <div class="hud-evidence-block">
+                <div class="hud-eyebrow">UNCLUSTERED</div>
+                <p>@_clusters.UnclusteredMatches.Count matches currently have no recorded shared-match connection inside the visible dataset.</p>
+            </div>
+        }
+    </section>
+}
+
+<style>
+    .dna-cluster-grid { display:grid; gap:1rem; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); }
+    .dna-cluster-card { border:1px solid rgba(68,227,255,.22); border-radius:12px; padding:1rem; background:rgba(3,11,25,.7); box-shadow:inset 0 0 28px rgba(53,220,255,.035); }
+    .dna-cluster-title { display:flex; justify-content:space-between; gap:1rem; color:#dffcff; }
+    .dna-cluster-title span,.dna-cluster-meter { color:#88a8b8; font-size:.82rem; }
+    .dna-cluster-meter { margin:.4rem 0 .8rem; }
+    .dna-node-grid { display:grid; gap:.55rem; }
+    .dna-node { display:grid; gap:.2rem; padding:.65rem .75rem; border-left:2px solid #50e7ff; background:rgba(38,88,128,.12); }
+    .dna-node span,.dna-node small { color:#9bb7c6; }
+</style>
+
+@code {
+    private const DnaAccessScope OwnerScope = DnaAccessScope.OwnerAdmin;
+    private DnaClusterDashboard? _dashboard;
+    private IReadOnlyList<DnaMatchListItem> _matches = [];
+    private DnaClusterResult? _clusters;
+    private DnaMatchListItem? _reviewMatch;
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _notice;
+
+    private string _provider = string.Empty;
+    private string _externalId = string.Empty;
+    private string _displayName = string.Empty;
+    private string _totalCmText = string.Empty;
+    private string _segmentsText = string.Empty;
+    private string _firstMatchId = string.Empty;
+    private string _secondMatchId = string.Empty;
+    private string _evidenceSource = string.Empty;
+    private string _manualLine = string.Empty;
+    private string _researchNotes = string.Empty;
+    private DnaMatchVisibility _reviewVisibility = DnaMatchVisibility.OwnerOnly;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _loading = false;
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            _error = null;
+            _dashboard = await DnaMatches.GetDashboardAsync(OwnerScope);
+            _matches = await DnaMatches.GetMatchesAsync(OwnerScope);
+            _clusters = await DnaMatches.GetClustersAsync(OwnerScope);
+            if (_reviewMatch is not null)
+                SelectReview(_reviewMatch.Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task AddMatchAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (!decimal.TryParse(_totalCmText, out var totalCm))
+                throw new InvalidOperationException("Total shared DNA must be a numeric cM value.");
+
+            int? segments = null;
+            if (!string.IsNullOrWhiteSpace(_segmentsText))
+            {
+                if (!int.TryParse(_segmentsText, out var parsedSegments))
+                    throw new InvalidOperationException("Shared segments must be a whole number when supplied.");
+                segments = parsedSegments;
+            }
+
+            await DnaMatches.AddMatchAsync(new DnaMatchImportRow(_provider, _externalId, _displayName, totalCm, segments), OwnerScope);
+            _provider = _externalId = _displayName = _totalCmText = _segmentsText = string.Empty;
+            _notice = "DNA match added as owner-only. No family-tree relationship was created.";
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private async Task AddSharedMatchAsync()
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            if (!Guid.TryParse(_firstMatchId, out var first) || !Guid.TryParse(_secondMatchId, out var second))
+                throw new InvalidOperationException("Select two DNA matches first.");
+
+            var added = await DnaMatches.AddSharedMatchAsync(first, second, _evidenceSource, OwnerScope);
+            _notice = added ? "Shared-match evidence recorded." : "That shared-match evidence link already exists; no duplicate was created.";
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+
+    private void SelectReview(Guid id)
+    {
+        _reviewMatch = _matches.SingleOrDefault(match => match.Id == id);
+        if (_reviewMatch is null) return;
+        _manualLine = _reviewMatch.ManualAncestralLineLabel;
+        _researchNotes = _reviewMatch.ResearchNotes;
+        _reviewVisibility = _reviewMatch.Visibility;
+    }
+
+    private async Task SaveReviewAsync()
+    {
+        if (_reviewMatch is null || _busy) return;
+        _busy = true;
+        try
+        {
+            await DnaMatches.SaveReviewAsync(_reviewMatch.Id, _manualLine, _researchNotes, _reviewVisibility, OwnerScope);
+            _notice = "Human DNA research review saved. Cluster calculations remain evidence-only.";
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+    }
+}

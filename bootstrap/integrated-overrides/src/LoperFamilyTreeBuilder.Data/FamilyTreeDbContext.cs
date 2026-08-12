@@ -18,6 +18,8 @@ public sealed class FamilyTreeDbContext : DbContext
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<MedicalCondition> MedicalConditions => Set<MedicalCondition>();
     public DbSet<HandwritingTranscription> HandwritingTranscriptions => Set<HandwritingTranscription>();
+    public DbSet<DnaMatch> DnaMatches => Set<DnaMatch>();
+    public DbSet<DnaSharedMatch> DnaSharedMatches => Set<DnaSharedMatch>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

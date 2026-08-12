@@ -13,6 +13,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ApplicationPaths>();
         services.AddSingleton<LocalDbConnectionStringFactory>();
         services.AddSingleton<FamilyTreeGraphBuilder>();
+        services.AddSingleton<DnaClusterEngine>();
 
         services.AddDbContextFactory<FamilyTreeDbContext>((provider, options) =>
         {
@@ -28,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<FamilyTreeQueryService>();
         services.AddScoped<MedicalHealthQueryService>();
         services.AddScoped<HandwritingTranscriptionService>();
+        services.AddScoped<DnaMatchService>();
         services.AddScoped<CoreDataInitializationService>();
         return services;
     }
