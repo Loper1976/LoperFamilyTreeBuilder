@@ -108,8 +108,8 @@ jobs:
           }
 
           & $scriptPath -SourceRoot $env:SOURCE_ROOT
-          if ($LASTEXITCODE -ne 0) {
-            throw "Person profile update script failed with exit code $LASTEXITCODE."
+          if (-not $?) {
+            throw 'Person profile update script reported a PowerShell execution failure.'
           }
 
       - name: Use WiX 5 installer toolchain
