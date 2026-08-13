@@ -83,17 +83,21 @@ jobs:
         shell: pwsh
         run: |
           $encoded = (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.ps1.gz.b64" -Raw).Trim()
-          $compressedBytes = [Convert]::FromBase64String($encoded)
-          $input = [IO.MemoryStream]::new($compressedBytes)
-          $gzip = [IO.Compression.GZipStream]::new($input, [IO.Compression.CompressionMode]::Decompress)
-          $reader = [IO.StreamReader]::new($gzip, [Text.Encoding]::UTF8)
-          $scriptText = $reader.ReadToEnd()
-          $reader.Dispose()
-          $gzip.Dispose()
-          $input.Dispose()
-
+          $gzipPath = Join-Path $env:RUNNER_TEMP 'person-profile-update.ps1.gz'
           $scriptPath = Join-Path $env:RUNNER_TEMP 'apply-person-profile-update.ps1'
-          Set-Content -Path $scriptPath -Value $scriptText -Encoding utf8
+          [IO.File]::WriteAllBytes($gzipPath, [Convert]::FromBase64String($encoded))
+
+          $gzipExe = 'C:\Program Files\Git\usr\bin\gzip.exe'
+          if (-not (Test-Path $gzipExe)) {
+            throw "Git-for-Windows gzip utility was not found at $gzipExe."
+          }
+
+          $command = '"' + $gzipExe + '" -dc "' + $gzipPath + '" > "' + $scriptPath + '"'
+          $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d', '/c', $command -Wait -PassThru
+          if ($process.ExitCode -ne 0 -or -not (Test-Path $scriptPath)) {
+            throw "gzip decompression failed with exit code $($process.ExitCode)."
+          }
+
           & $scriptPath -SourceRoot $env:SOURCE_ROOT
           if ($LASTEXITCODE -ne 0) {
             throw "Person profile update script failed with exit code $LASTEXITCODE."
