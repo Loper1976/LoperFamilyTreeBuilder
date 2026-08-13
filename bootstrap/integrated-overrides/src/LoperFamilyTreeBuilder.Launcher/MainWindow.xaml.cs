@@ -73,15 +73,9 @@ public partial class MainWindow : Window
         };
     }
 
-    private async void RefreshPeople_Click(object sender, RoutedEventArgs e)
-    {
-        await LoadPeopleAsync(force: true);
-    }
+    private async void RefreshPeople_Click(object sender, RoutedEventArgs e) => await LoadPeopleAsync(force: true);
 
-    private void PeopleSearchBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        ApplyPeopleFilter();
-    }
+    private void PeopleSearchBox_TextChanged(object sender, TextChangedEventArgs e) => ApplyPeopleFilter();
 
     private async void PeopleGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -232,7 +226,7 @@ public partial class MainWindow : Window
                 .Distinct()
                 .ToList();
 
-            var relatives = relativeIds.Count == 0
+            List<RelativeRow> relatives = relativeIds.Count == 0
                 ? []
                 : await db.People.AsNoTracking()
                     .Where(relative => relativeIds.Contains(relative.Id))
@@ -244,13 +238,16 @@ public partial class MainWindow : Window
                         relative.Suffix))
                     .ToListAsync();
 
-            var relativeLegacy = relativeIds.Count == 0
-                ? new Dictionary<Guid, string>()
+            var relativeIdentifierRows = relativeIds.Count == 0
+                ? []
                 : await db.PersonIdentifiers.AsNoTracking()
                     .Where(identifier => relativeIds.Contains(identifier.PersonId) && identifier.IdentifierType == PersonIdentifierType.LegacyNumber)
-                    .GroupBy(identifier => identifier.PersonId)
-                    .Select(group => new { PersonId = group.Key, Value = group.Select(item => item.Value).First() })
-                    .ToDictionaryAsync(item => item.PersonId, item => item.Value);
+                    .Select(identifier => new RelativeIdentifierRow(identifier.PersonId, identifier.Value))
+                    .ToListAsync();
+
+            var relativeLegacy = relativeIdentifierRows
+                .GroupBy(identifier => identifier.PersonId)
+                .ToDictionary(group => group.Key, group => group.First().Value);
 
             var byId = relatives.ToDictionary(relative => relative.Id);
             var parents = relationships
@@ -268,8 +265,8 @@ public partial class MainWindow : Window
             ProfileLegacyNumber.Text = string.IsNullOrWhiteSpace(legacy) ? "Not assigned" : legacy;
             ProfileLife.Text = $"Born: {person.BirthDate?.ToString("MMMM d, yyyy") ?? "Unknown"}\n{(person.IsLiving ? "Status: Living" : $"Died: {person.DeathDate?.ToString("MMMM d, yyyy") ?? "Unknown"}")}";
             ProfileBranches.Text = branches.Count == 0 ? "Not assigned" : string.Join(" • ", branches);
-            ProfileParents.ItemsSource = parents.Count == 0 ? ["No parent relationships recorded"] : parents;
-            ProfileChildren.ItemsSource = children.Count == 0 ? ["No child relationships recorded"] : children;
+            ProfileParents.ItemsSource = parents.Count == 0 ? new[] { "No parent relationships recorded" } : parents;
+            ProfileChildren.ItemsSource = children.Count == 0 ? new[] { "No child relationships recorded" } : children;
             ProfileRecordId.Text = $"Stable Person ID: {person.Id}";
         }
         catch (Exception ex)
@@ -388,6 +385,7 @@ public partial class MainWindow : Window
     }
 
     private sealed record PersonRow(Guid Id, string DisplayName, string LegacyNumber, string BirthDisplay, string DeathDisplay);
+    private sealed record RelativeIdentifierRow(Guid PersonId, string Value);
 
     private sealed record RelativeRow(Guid Id, string GivenName, string MiddleName, string Surname, string Suffix)
     {
