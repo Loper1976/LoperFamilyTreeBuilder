@@ -103,11 +103,9 @@ jobs:
           $text=Get-Content $package -Raw
           $text=[regex]::Replace($text,'Version="[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.4"',1)
           if($text -notmatch '<MajorUpgrade\b'){$text=$text.Replace('</Package>',"  <MajorUpgrade DowngradeErrorMessage=`"A newer version of Loper Family Tree Builder is already installed.`" />`r`n</Package>")}
-          # WiX 5 supports DesktopFolder. In a per-machine/all-users install it resolves to the shared Public Desktop.
           if($text -notmatch '<StandardDirectory Id="DesktopFolder"'){throw 'DesktopFolder standard directory is missing.'}
           if($text -notmatch 'Shortcut Id="DesktopShortcut"'){throw 'Desktop shortcut definition is missing.'}
           if($text -notmatch 'Component Id="DesktopShortcutComponent" Directory="DesktopFolder"'){throw 'Desktop shortcut component is not assigned to DesktopFolder.'}
-          if($text -notmatch '<Property Id="ALLUSERS"'){$text=$text.Replace('</Package>',"  <Property Id=`"ALLUSERS`" Value=`"1`" />`r`n</Package>")}
           Set-Content $package $text -Encoding utf8
 
           $bundle="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
@@ -116,7 +114,7 @@ jobs:
           $b=[regex]::Replace($b,'(?s)\s*<MsiPackage\s+SourceFile="\$\(PayloadDir\)\\SqlLocalDB\.msi".*?</MsiPackage>\s*',"`r`n",1)
           if($b -match 'SqlLocalDB'){throw 'LocalDB prerequisite was not removed from upgrade bundle.'}
           Set-Content $bundle $b -Encoding utf8
-          Write-Host 'Configured MSI 1.2.4, all-users DesktopFolder shortcut, and bundle 1.2.4.0'
+          Write-Host 'Configured MSI 1.2.4, DesktopFolder shortcut, and bundle 1.2.4.0'
 
       - name: Build 1.2.4 MSI and bundle
         shell: pwsh
