@@ -1,0 +1,166 @@
+name: Build Native Desktop Upgrade 1.2.5
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [agent/integrated-desktop-release]
+    paths:
+      - '.github/workflows/build-native-upgrade-1-2-5.yml'
+      - 'bootstrap/integrated-overrides/**'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-upgrade-test:
+    runs-on: windows-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reassemble verified source
+        shell: pwsh
+        run: |
+          $base64=''
+          foreach($part in @('bootstrap/source.part01.b64','bootstrap/source.part02.b64','bootstrap/source.part03.b64','bootstrap/source.part04.b64','bootstrap/source.part05.b64','bootstrap/source.part06.b64')){$base64+=(Get-Content $part -Raw).Trim()}
+          $base64+=(Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64+=(Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64+=(Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+          $part7d=(Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          if($part7d.Length -lt 4500){throw 'Source part 7d incomplete.'}
+          $base64+=$part7d.Substring(0,4500)
+          $base64+=(Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+          [IO.File]::WriteAllBytes('phase3.zip',[Convert]::FromBase64String($base64))
+          if((Get-FileHash phase3.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'eed76fb56a914b1dfba9202053c7f1c3f50a089f1b70f1565157350693ae3cb4'){throw 'Source verification failed.'}
+          Expand-Archive phase3.zip -DestinationPath source -Force
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Apply integrated desktop overrides
+        shell: pwsh
+        run: |
+          $root="$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3"
+          "SOURCE_ROOT=$root" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $overrideRoot="$env:GITHUB_WORKSPACE\bootstrap\integrated-overrides"
+          Get-ChildItem $overrideRoot -File -Recurse | ForEach-Object {
+            $relative=$_.FullName.Substring($overrideRoot.Length).TrimStart('\')
+            $destination=Join-Path $root $relative
+            New-Item -ItemType Directory -Force (Split-Path $destination -Parent)|Out-Null
+            Copy-Item $_.FullName $destination -Force
+          }
+
+      - name: Configure WiX compatibility
+        shell: pwsh
+        run: |
+          $msiProject="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj"
+          $setupProject="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj"
+          Set-Content $msiProject ((Get-Content $msiProject -Raw).Replace('WixToolset.Sdk/7.0.0','WixToolset.Sdk/5.0.0')) -Encoding utf8
+          Set-Content $setupProject ((Get-Content $setupProject -Raw).Replace('WixToolset.Sdk/7.0.0','WixToolset.Sdk/5.0.0').Replace('WixToolset.Bal.wixext" Version="7.0.0','WixToolset.Bal.wixext" Version="5.0.0')) -Encoding utf8
+          Set-Content "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\GlobalUsings.cs" 'global using Xunit;' -Encoding utf8
+          $imports="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\_Imports.razor"
+          if((Get-Content $imports -Raw) -notmatch 'RenderMode'){Add-Content $imports '@using static Microsoft.AspNetCore.Components.Web.RenderMode'}
+          $homePage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\Home.razor"
+          $t=Get-Content $homePage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); if($t -notmatch 'private void AddPerson\(\)'){$t=$t.Replace('    private void OpenPeopleSearch()',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private void OpenPeopleSearch()")} ; Set-Content $homePage $t
+          $peoplePage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\People.razor"
+          $t=Get-Content $peoplePage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people/add")"','@onclick="AddPerson"'); if($t -notmatch 'private void AddPerson\(\)'){$t=$t.Replace('    private static string FormatDate(DateOnly? date)',"    private void AddPerson()`r`n    {`r`n        Navigation.NavigateTo(`"/people/add`");`r`n    }`r`n`r`n    private static string FormatDate(DateOnly? date)")} ; Set-Content $peoplePage $t
+          $addPage="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\Pages\AddPerson.razor"
+          $t=Get-Content $addPage -Raw; $t=$t.Replace('@onclick="() => Navigation.NavigateTo("/people")"','@onclick="Cancel"'); if($t -notmatch 'private void Cancel\(\)'){$t=$t.Replace('    private CreatePersonRequest ToRequest()',"    private void Cancel()`r`n    {`r`n        Navigation.NavigateTo(`"/people`");`r`n    }`r`n`r`n    private CreatePersonRequest ToRequest()")} ; Set-Content $addPage $t
+
+      - name: Run preservation tests
+        shell: pwsh
+        run: |
+          dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
+          dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
+
+      - name: Publish native desktop payload
+        shell: pwsh
+        run: |
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\LoperFamilyTreeBuilder.Web.csproj" -c Release -r win-x64 --self-contained true -o "$env:GITHUB_WORKSPACE\artifacts\publish\Web"
+          dotnet publish "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\LoperFamilyTreeBuilder.Launcher.csproj" -c Release -r win-x64 --self-contained true -p:EnableWindowsTargeting=true -o "$env:GITHUB_WORKSPACE\artifacts\publish\Launcher"
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\payload\app\Web"|Out-Null
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\publish\Web\*" "$env:GITHUB_WORKSPACE\artifacts\payload\app\Web" -Recurse -Force
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\publish\Launcher\*" "$env:GITHUB_WORKSPACE\artifacts\payload\app" -Recurse -Force
+
+      - name: Native desktop smoke launch
+        shell: pwsh
+        run: |
+          $desktopExe="$env:GITHUB_WORKSPACE\artifacts\publish\Launcher\LoperFamilyTreeBuilder.Launcher.exe"
+          $p=Start-Process $desktopExe -PassThru
+          Start-Sleep -Seconds 4
+          if($p.HasExited){throw "Native desktop exited during smoke test with code $($p.ExitCode)"}
+          Stop-Process -Id $p.Id -Force
+          Write-Host 'Native desktop smoke launch passed.'
+
+      - name: Build and install 1.2.4 baseline MSI
+        shell: pwsh
+        run: |
+          $package="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
+          $text=Get-Content $package -Raw
+          $text=[regex]::Replace($text,'Version="[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.4"',1).Replace('Root="HKMU"','Root="HKCU"')
+          Set-Content $package $text -Encoding utf8
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" -o "$env:GITHUB_WORKSPACE\artifacts\baseline"
+          $p=Start-Process msiexec.exe -ArgumentList @('/i',"$env:GITHUB_WORKSPACE\artifacts\baseline\LoperFamilyTreeBuilder.msi",'/qn','/norestart') -Wait -PassThru
+          if($p.ExitCode -ne 0){throw "1.2.4 baseline install failed: $($p.ExitCode)"}
+          New-Item -ItemType Directory -Force "$env:ProgramData\LoperFamilyTreeBuilderTest"|Out-Null
+          Set-Content "$env:ProgramData\LoperFamilyTreeBuilderTest\preserve.txt" 'preserve-me'
+
+      - name: Configure 1.2.5 MSI and bundle
+        shell: pwsh
+        run: |
+          $package="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
+          $text=Get-Content $package -Raw
+          $text=[regex]::Replace($text,'Version="[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.5"',1)
+          if($text -notmatch '<MajorUpgrade\b'){$text=$text.Replace('</Package>',"  <MajorUpgrade DowngradeErrorMessage=`"A newer version of Loper Family Tree Builder is already installed.`" />`r`n</Package>")}
+          if($text -notmatch '<StandardDirectory Id="DesktopFolder"'){throw 'DesktopFolder standard directory is missing.'}
+          if($text -notmatch 'Shortcut Id="DesktopShortcut"'){throw 'Desktop shortcut definition is missing.'}
+          Set-Content $package $text -Encoding utf8
+          $bundle="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
+          $b=Get-Content $bundle -Raw
+          $b=[regex]::Replace($b,'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.5.0"',1)
+          $b=[regex]::Replace($b,'(?s)\s*<MsiPackage\s+SourceFile="\$\(PayloadDir\)\\SqlLocalDB\.msi".*?</MsiPackage>\s*',"`r`n",1)
+          if($b -match 'SqlLocalDB'){throw 'LocalDB prerequisite was not removed from upgrade bundle.'}
+          Set-Content $bundle $b -Encoding utf8
+
+      - name: Build 1.2.5 MSI and bundle
+        shell: pwsh
+        run: |
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" -o "$env:GITHUB_WORKSPACE\artifacts\msi"
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\msi\LoperFamilyTreeBuilder.msi" "$env:GITHUB_WORKSPACE\artifacts\payload\LoperFamilyTreeBuilder.msi" -Force
+          dotnet build "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj" -c Release -p:InstallerPlatform=x64 -p:PayloadDir="$env:GITHUB_WORKSPACE\artifacts\payload" -o "$env:GITHUB_WORKSPACE\artifacts\setup"
+
+      - name: Real 1.2.4 to 1.2.5 upgrade test
+        shell: pwsh
+        run: |
+          $exe="$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe"
+          $p=Start-Process $exe -ArgumentList @('/quiet','/norestart') -Wait -PassThru
+          if($p.ExitCode -ne 0){throw "1.2.5 upgrade EXE failed: $($p.ExitCode)"}
+          if(-not(Test-Path "$env:ProgramFiles\Loper Family Tree Builder\LoperFamilyTreeBuilder.Launcher.exe")){throw 'Application missing after upgrade.'}
+          if((Get-Content "$env:ProgramData\LoperFamilyTreeBuilderTest\preserve.txt" -Raw).Trim() -ne 'preserve-me'){throw 'Preservation sentinel changed.'}
+          $shortcut="$env:PUBLIC\Desktop\Loper Family Tree Builder.lnk"
+          if(-not(Test-Path $shortcut)){throw "Desktop shortcut missing after upgrade: $shortcut"}
+          $shell=New-Object -ComObject WScript.Shell
+          $sc=$shell.CreateShortcut($shortcut)
+          if($sc.TargetPath -notlike '*LoperFamilyTreeBuilder.Launcher.exe'){throw "Desktop shortcut target incorrect: $($sc.TargetPath)"}
+          $entries=Get-ItemProperty 'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object {$_.DisplayName -eq 'Loper Family Tree Builder'}
+          $versions=@($entries.DisplayVersion | Sort-Object -Unique)
+          if($versions -notcontains '1.2.5'){throw "1.2.5 not registered. Found: $($versions -join ', ')"}
+          Write-Host 'REAL UPGRADE TEST PASSED: 1.2.4 -> 1.2.5'
+
+      - name: Stage installer
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\final"|Out-Null
+          $src="$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe"
+          $dst="$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup.exe"
+          Copy-Item $src $dst -Force
+          Write-Host "Installer size: $((Get-Item $dst).Length) bytes"
+          Write-Host "Installer SHA256: $((Get-FileHash $dst -Algorithm SHA256).Hash)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilderSetup-NativeUpgrade-1.2.5
+          path: artifacts/final/LoperFamilyTreeBuilderSetup.exe
+          if-no-files-found: error
+          retention-days: 7
