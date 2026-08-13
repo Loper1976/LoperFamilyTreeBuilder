@@ -1,4 +1,4 @@
-name: Build Loper Family Tree Builder 1.2.6 Upgrade
+name: Build Loper Family Tree Builder 1.2.9 Combined Update
 
 on:
   workflow_dispatch:
@@ -60,7 +60,7 @@ jobs:
         run: |
           Copy-Item "$env:GITHUB_WORKSPACE\bootstrap\overrides\FirstRunSetupForm.cs" "$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Launcher\FirstRunSetupForm.cs" -Force
 
-      - name: Apply 1.0.17 application feature update
+      - name: Apply person profile and protected Legacy Number update
         shell: pwsh
         run: |
           $encoded = ''
@@ -81,6 +81,25 @@ jobs:
           & $scriptPath -SourceRoot $env:SOURCE_ROOT
           if (-not $?) { throw 'Person profile update script reported a PowerShell execution failure.' }
 
+      - name: Apply combined 1.2.7 through 1.2.9 feature overlay
+        shell: pwsh
+        run: |
+          $encoded = ''
+          foreach ($part in @(
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part01.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part03.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part04.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part05.b64"
+          )) { $encoded += (Get-Content $part -Raw).Trim() }
+          $overlayPath = Join-Path $env:RUNNER_TEMP 'combined-1.2.9-overlay.zip'
+          [IO.File]::WriteAllBytes($overlayPath,[Convert]::FromBase64String($encoded))
+          $expectedOverlay = '3b04530106fd111614d9f9d8d11cd2679567c7df37ea15c35a282a66de5e6963'
+          $actualOverlay = (Get-FileHash $overlayPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualOverlay -ne $expectedOverlay) { throw "Combined feature overlay failed SHA-256 verification. Expected $expectedOverlay but received $actualOverlay." }
+          Expand-Archive $overlayPath -DestinationPath $env:SOURCE_ROOT -Force
+          Write-Host 'Applied Relationships Workspace, Timeline and Geography, and Tree Health review engine.'
+
       - name: Use WiX 5 installer toolchain
         shell: pwsh
         run: |
@@ -92,19 +111,19 @@ jobs:
           $setupText = $setupText.Replace('WixToolset.Sdk/7.0.0','WixToolset.Sdk/5.0.0').Replace('WixToolset.Bal.wixext" Version="7.0.0','WixToolset.Bal.wixext" Version="5.0.0')
           Set-Content $setupProject $setupText -Encoding utf8
 
-      - name: Set monotonic upgrade version 1.2.6
+      - name: Set monotonic upgrade version 1.2.9
         shell: pwsh
         run: |
           $packagePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
           $packageText = Get-Content $packagePath -Raw
-          $packageText = $packageText.Replace('Version="1.0.0"','Version="1.2.6"').Replace('Root="HKMU"','Root="HKCU"')
+          $packageText = $packageText.Replace('Version="1.0.0"','Version="1.2.9"').Replace('Root="HKMU"','Root="HKCU"')
           Set-Content $packagePath $packageText -Encoding utf8
           $bundlePath = "$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
-          $bundleText = (Get-Content $bundlePath -Raw).Replace('Version="1.0.0.0"','Version="1.2.6.0"')
+          $bundleText = (Get-Content $bundlePath -Raw).Replace('Version="1.0.0.0"','Version="1.2.9.0"')
           Set-Content $bundlePath $bundleText -Encoding utf8
-          if ((Get-Content $packagePath -Raw) -notmatch 'Version="1\.2\.6"') { throw 'MSI version was not set to 1.2.6.' }
-          if ((Get-Content $bundlePath -Raw) -notmatch 'Version="1\.2\.6\.0"') { throw 'Bundle version was not set to 1.2.6.0.' }
-          Write-Host 'Upgrade baseline: installed 1.2.5 -> new 1.2.6'
+          if ((Get-Content $packagePath -Raw) -notmatch 'Version="1\.2\.9"') { throw 'MSI version was not set to 1.2.9.' }
+          if ((Get-Content $bundlePath -Raw) -notmatch 'Version="1\.2\.9\.0"') { throw 'Bundle version was not set to 1.2.9.0.' }
+          Write-Host 'Upgrade baseline: released 1.2.6 -> combined release 1.2.9'
 
       - name: Apply xUnit compatibility fix
         shell: pwsh
@@ -139,7 +158,7 @@ jobs:
         shell: pwsh
         run: dotnet restore "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj"
 
-      - name: Run preservation tests
+      - name: Run preservation and genealogy validation tests
         shell: pwsh
         run: dotnet test "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\LoperFamilyTreeBuilder.Tests.csproj" -c Release --no-restore
 
@@ -195,12 +214,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\artifacts\final" | Out-Null
-          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe" "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup-1.2.6.exe" -Force
-          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup-1.2.6.exe" -Algorithm SHA256
+          Copy-Item "$env:GITHUB_WORKSPACE\artifacts\setup\LoperFamilyTreeBuilderSetup.exe" "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup-1.2.9.exe" -Force
+          Get-FileHash "$env:GITHUB_WORKSPACE\artifacts\final\LoperFamilyTreeBuilderSetup-1.2.9.exe" -Algorithm SHA256
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: LoperFamilyTreeBuilderSetup-1.2.6
-          path: artifacts/final/LoperFamilyTreeBuilderSetup-1.2.6.exe
+          name: LoperFamilyTreeBuilderSetup-1.2.9
+          path: artifacts/final/LoperFamilyTreeBuilderSetup-1.2.9.exe
           if-no-files-found: error
