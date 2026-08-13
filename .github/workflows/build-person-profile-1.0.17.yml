@@ -82,20 +82,29 @@ jobs:
       - name: Apply person profile, audit, and Legacy Number update
         shell: pwsh
         run: |
-          $encoded = (Get-Content "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.ps1.gz.b64" -Raw).Trim()
-          $gzipPath = Join-Path $env:RUNNER_TEMP 'person-profile-update.ps1.gz'
-          $scriptPath = Join-Path $env:RUNNER_TEMP 'apply-person-profile-update.ps1'
-          [IO.File]::WriteAllBytes($gzipPath, [Convert]::FromBase64String($encoded))
-
-          $gzipExe = 'C:\Program Files\Git\usr\bin\gzip.exe'
-          if (-not (Test-Path $gzipExe)) {
-            throw "Git-for-Windows gzip utility was not found at $gzipExe."
+          $encoded = ''
+          foreach ($part in @(
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.part01.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.part02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail01.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail03.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail04.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail05.b64"
+          )) {
+            $encoded += (Get-Content $part -Raw).Trim()
           }
 
-          $command = '"' + $gzipExe + '" -dc "' + $gzipPath + '" > "' + $scriptPath + '"'
-          $process = Start-Process -FilePath 'cmd.exe' -ArgumentList '/d', '/c', $command -Wait -PassThru
-          if ($process.ExitCode -ne 0 -or -not (Test-Path $scriptPath)) {
-            throw "gzip decompression failed with exit code $($process.ExitCode)."
+          $scriptPath = Join-Path $env:RUNNER_TEMP 'apply-person-profile-update.ps1'
+          [IO.File]::WriteAllBytes(
+            $scriptPath,
+            [Convert]::FromBase64String($encoded)
+          )
+
+          $expectedPatch = '73dd054ca4fae76736be661be238486e2ef1d0d6e3c2da8937aeef25c6d89f59'
+          $actualPatch = (Get-FileHash $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualPatch -ne $expectedPatch) {
+            throw "Person profile patch failed SHA-256 verification. Expected $expectedPatch but received $actualPatch."
           }
 
           & $scriptPath -SourceRoot $env:SOURCE_ROOT
