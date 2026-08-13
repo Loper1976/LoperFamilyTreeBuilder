@@ -47,6 +47,7 @@
                 </ScrollViewer>
             </DockPanel>
         </Border>
+
         <Grid Grid.Column="1" Margin="24">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
             <Grid Grid.Row="0" Margin="0,0,0,18">
@@ -60,22 +61,81 @@
                     <Border Background="#0D2130" BorderBrush="#1D6674" BorderThickness="1" Padding="10,6" CornerRadius="4"><TextBlock Text="LOCAL / PRIVATE" Foreground="{StaticResource CyanBrush}" FontSize="11" FontWeight="SemiBold"/></Border>
                 </StackPanel>
             </Grid>
-            <Border Grid.Row="1" Background="{StaticResource PanelBrush}" BorderBrush="#173347" BorderThickness="1" CornerRadius="8" Padding="22">
-                <Grid>
-                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-                    <TextBlock x:Name="WorkspaceHeading" Text="Desktop Archive Status" Foreground="{StaticResource CyanBrush}" FontSize="20" FontWeight="SemiBold"/>
-                    <TextBlock x:Name="WorkspaceDescription" Grid.Row="1" Margin="0,8,0,18" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="14" Text="The local Family Tree Builder now launches as a native Windows desktop application. Browser hosting is not required for this shell."/>
-                    <UniformGrid Grid.Row="2" Columns="3" Rows="2" Margin="0,8,0,0">
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="PEOPLE" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Archive-ready" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="RELATIONSHIPS" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Protected" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="TIMELINE / MAPS" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Integrated" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="MEDIA / SOURCES" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Integrated" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="MEDICAL / DNA" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Private" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                        <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="DEPLOYMENT" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Desktop only" Foreground="{StaticResource CyanBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
-                    </UniformGrid>
+
+            <Grid Grid.Row="1">
+                <Border x:Name="DefaultWorkspace" Background="{StaticResource PanelBrush}" BorderBrush="#173347" BorderThickness="1" CornerRadius="8" Padding="22">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <TextBlock x:Name="WorkspaceHeading" Text="Desktop Archive Status" Foreground="{StaticResource CyanBrush}" FontSize="20" FontWeight="SemiBold"/>
+                        <TextBlock x:Name="WorkspaceDescription" Grid.Row="1" Margin="0,8,0,18" TextWrapping="Wrap" Foreground="{StaticResource MutedBrush}" FontSize="14" Text="The local Family Tree Builder now launches as a native Windows desktop application."/>
+                        <UniformGrid Grid.Row="2" Columns="3" Rows="2" Margin="0,8,0,0">
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="PEOPLE" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Native workspace" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="RELATIONSHIPS" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Protected" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="TIMELINE / MAPS" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Integrated" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="MEDIA / SOURCES" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Integrated" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="MEDICAL / DNA" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Private" Foreground="{StaticResource TextBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                            <Border Background="{StaticResource PanelAltBrush}" Margin="5" Padding="16" CornerRadius="6"><StackPanel><TextBlock Text="DEPLOYMENT" Foreground="{StaticResource MutedBrush}"/><TextBlock Text="Desktop only" Foreground="{StaticResource CyanBrush}" FontSize="20" Margin="0,6,0,0"/></StackPanel></Border>
+                        </UniformGrid>
+                    </Grid>
+                </Border>
+
+                <Grid x:Name="PeopleWorkspace" Visibility="Collapsed">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="3*"/><ColumnDefinition Width="14"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Background="{StaticResource PanelBrush}" BorderBrush="#173347" BorderThickness="1" CornerRadius="8" Padding="18">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                            <DockPanel>
+                                <StackPanel DockPanel.Dock="Left">
+                                    <TextBlock Text="People Workspace" Foreground="{StaticResource CyanBrush}" FontSize="20" FontWeight="SemiBold"/>
+                                    <TextBlock x:Name="PeopleStatus" Text="Loading local archive..." Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,4,0,0"/>
+                                </StackPanel>
+                                <Button DockPanel.Dock="Right" Content="Refresh" Click="RefreshPeople_Click" Width="86" HorizontalAlignment="Right"/>
+                            </DockPanel>
+                            <Grid Grid.Row="1" Margin="0,14,0,12">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox x:Name="PeopleSearchBox" Height="34" Padding="9,5" VerticalContentAlignment="Center" TextChanged="PeopleSearchBox_TextChanged" ToolTip="Search name or Legacy Number"/>
+                                <TextBlock Grid.Column="1" Text="Name / Legacy Number" Foreground="{StaticResource MutedBrush}" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                            </Grid>
+                            <DataGrid x:Name="PeopleGrid" Grid.Row="2" AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Single" SelectionChanged="PeopleGrid_SelectionChanged" Background="#0A1520" Foreground="{StaticResource TextBrush}" BorderBrush="#173347" GridLinesVisibility="Horizontal" HeadersVisibility="Column" CanUserAddRows="False" CanUserDeleteRows="False">
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Name" Binding="{Binding DisplayName}" Width="2*"/>
+                                    <DataGridTextColumn Header="Legacy Number" Binding="{Binding LegacyNumber}" Width="*"/>
+                                    <DataGridTextColumn Header="Born" Binding="{Binding BirthDisplay}" Width="*"/>
+                                    <DataGridTextColumn Header="Died / Status" Binding="{Binding DeathDisplay}" Width="*"/>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                            <TextBlock Grid.Row="3" Margin="0,10,0,0" Foreground="#77F0B0" FontSize="11" Text="Legacy Numbers are displayed read-only and are never recalculated by this workspace."/>
+                        </Grid>
+                    </Border>
+
+                    <Border Grid.Column="2" Background="{StaticResource PanelBrush}" BorderBrush="#173347" BorderThickness="1" CornerRadius="8" Padding="20">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <TextBlock Text="PERSON COMMAND PROFILE" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                                <TextBlock x:Name="ProfileName" Text="Select a person" Foreground="{StaticResource CyanBrush}" FontSize="25" FontWeight="SemiBold" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                                <Border Background="#11251E" BorderBrush="#2D6B53" BorderThickness="1" CornerRadius="4" Padding="9" Margin="0,12,0,14">
+                                    <StackPanel>
+                                        <TextBlock Text="ROBERT J. LOPER LEGACY NUMBER" Foreground="#77F0B0" FontSize="10"/>
+                                        <TextBlock x:Name="ProfileLegacyNumber" Text="—" Foreground="{StaticResource TextBrush}" FontSize="20" FontWeight="SemiBold" Margin="0,3,0,0"/>
+                                        <TextBlock Text="Protected historical identifier • read only" Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <TextBlock Text="LIFE" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                                <TextBlock x:Name="ProfileLife" Text="—" Foreground="{StaticResource TextBrush}" FontSize="16" Margin="0,4,0,12"/>
+                                <TextBlock Text="FAMILY BRANCHES" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                                <TextBlock x:Name="ProfileBranches" Text="—" Foreground="{StaticResource TextBrush}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+                                <TextBlock Text="PARENTS" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                                <ItemsControl x:Name="ProfileParents" Margin="0,4,0,12"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{StaticResource TextBrush}" Margin="0,2" TextWrapping="Wrap"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                <TextBlock Text="CHILDREN" Foreground="{StaticResource MutedBrush}" FontSize="11"/>
+                                <ItemsControl x:Name="ProfileChildren" Margin="0,4,0,12"><ItemsControl.ItemTemplate><DataTemplate><TextBlock Text="{Binding}" Foreground="{StaticResource TextBrush}" Margin="0,2" TextWrapping="Wrap"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                                <TextBlock x:Name="ProfileRecordId" Text="" Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,12,0,0"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
                 </Grid>
-            </Border>
-            <Grid Grid.Row="2" Margin="0,14,0,0"><TextBlock Text="Loper Family Tree Builder • Native Windows desktop foundation" Foreground="{StaticResource MutedBrush}" FontSize="11"/></Grid>
+            </Grid>
+
+            <Grid Grid.Row="2" Margin="0,14,0,0"><TextBlock Text="Loper Family Tree Builder • Native Windows desktop • v1.2.5 workspace" Foreground="{StaticResource MutedBrush}" FontSize="11"/></Grid>
         </Grid>
     </Grid>
 </Window>
