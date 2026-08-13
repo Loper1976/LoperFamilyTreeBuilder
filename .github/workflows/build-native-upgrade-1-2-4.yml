@@ -51,23 +51,13 @@ jobs:
             Copy-Item $_.FullName $destination -Force
           }
 
-      - name: Configure WiX, shortcut, and compatibility source
+      - name: Configure WiX and compatibility source
         shell: pwsh
         run: |
           $msiProject="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\LoperFamilyTreeBuilder.Msi.wixproj"
           $setupProject="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\LoperFamilyTreeBuilder.Setup.wixproj"
           Set-Content $msiProject ((Get-Content $msiProject -Raw).Replace('WixToolset.Sdk/7.0.0','WixToolset.Sdk/5.0.0')) -Encoding utf8
           Set-Content $setupProject ((Get-Content $setupProject -Raw).Replace('WixToolset.Sdk/7.0.0','WixToolset.Sdk/5.0.0').Replace('WixToolset.Bal.wixext" Version="7.0.0','WixToolset.Bal.wixext" Version="5.0.0')) -Encoding utf8
-
-          # Force an all-users desktop shortcut on the Windows Public Desktop.
-          $package="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
-          $pkg=Get-Content $package -Raw
-          $pkg=$pkg.Replace('<StandardDirectory Id="DesktopFolder" />','<StandardDirectory Id="CommonDesktopFolder" />')
-          $pkg=$pkg.Replace('Component Id="DesktopShortcutComponent" Directory="DesktopFolder"','Component Id="DesktopShortcutComponent" Directory="CommonDesktopFolder"')
-          if($pkg -notmatch 'Shortcut Id="DesktopShortcut"'){throw 'Desktop shortcut definition is missing.'}
-          if($pkg -notmatch 'Directory="CommonDesktopFolder"'){throw 'Desktop shortcut is not configured for the Public Desktop.'}
-          Set-Content $package $pkg -Encoding utf8
-
           Set-Content "$env:SOURCE_ROOT\tests\LoperFamilyTreeBuilder.Tests\GlobalUsings.cs" 'global using Xunit;' -Encoding utf8
           $imports="$env:SOURCE_ROOT\src\LoperFamilyTreeBuilder.Web\Components\_Imports.razor"
           if((Get-Content $imports -Raw) -notmatch 'RenderMode'){Add-Content $imports '@using static Microsoft.AspNetCore.Components.Web.RenderMode'}
@@ -106,21 +96,27 @@ jobs:
           New-Item -ItemType Directory -Force "$env:ProgramData\LoperFamilyTreeBuilderTest"|Out-Null
           Set-Content "$env:ProgramData\LoperFamilyTreeBuilderTest\preserve.txt" 'preserve-me'
 
-      - name: Configure 1.2.4 MSI and bundle
+      - name: Configure 1.2.4 MSI, desktop shortcut, and bundle
         shell: pwsh
         run: |
           $package="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Msi\Package.wxs"
           $text=Get-Content $package -Raw
           $text=[regex]::Replace($text,'Version="[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.4"',1)
           if($text -notmatch '<MajorUpgrade\b'){$text=$text.Replace('</Package>',"  <MajorUpgrade DowngradeErrorMessage=`"A newer version of Loper Family Tree Builder is already installed.`" />`r`n</Package>")}
+          # WiX 5 supports DesktopFolder. In a per-machine/all-users install it resolves to the shared Public Desktop.
+          if($text -notmatch '<StandardDirectory Id="DesktopFolder"'){throw 'DesktopFolder standard directory is missing.'}
+          if($text -notmatch 'Shortcut Id="DesktopShortcut"'){throw 'Desktop shortcut definition is missing.'}
+          if($text -notmatch 'Component Id="DesktopShortcutComponent" Directory="DesktopFolder"'){throw 'Desktop shortcut component is not assigned to DesktopFolder.'}
+          if($text -notmatch '<Property Id="ALLUSERS"'){$text=$text.Replace('</Package>',"  <Property Id=`"ALLUSERS`" Value=`"1`" />`r`n</Package>")}
           Set-Content $package $text -Encoding utf8
+
           $bundle="$env:SOURCE_ROOT\installer\LoperFamilyTreeBuilder.Setup\Bundle.wxs"
           $b=Get-Content $bundle -Raw
           $b=[regex]::Replace($b,'Version="[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+"','Version="1.2.4.0"',1)
           $b=[regex]::Replace($b,'(?s)\s*<MsiPackage\s+SourceFile="\$\(PayloadDir\)\\SqlLocalDB\.msi".*?</MsiPackage>\s*',"`r`n",1)
           if($b -match 'SqlLocalDB'){throw 'LocalDB prerequisite was not removed from upgrade bundle.'}
           Set-Content $bundle $b -Encoding utf8
-          Write-Host 'Configured application MSI 1.2.4 and bundle 1.2.4.0'
+          Write-Host 'Configured MSI 1.2.4, all-users DesktopFolder shortcut, and bundle 1.2.4.0'
 
       - name: Build 1.2.4 MSI and bundle
         shell: pwsh
@@ -138,7 +134,7 @@ jobs:
           if(-not(Test-Path "$env:ProgramFiles\Loper Family Tree Builder\LoperFamilyTreeBuilder.Launcher.exe")){throw 'Application missing after upgrade.'}
           if((Get-Content "$env:ProgramData\LoperFamilyTreeBuilderTest\preserve.txt" -Raw).Trim() -ne 'preserve-me'){throw 'Preservation sentinel changed.'}
           $shortcut="$env:PUBLIC\Desktop\Loper Family Tree Builder.lnk"
-          if(-not(Test-Path $shortcut)){throw "Desktop shortcut was not created: $shortcut"}
+          if(-not(Test-Path $shortcut)){throw "Desktop shortcut was not created on the Public Desktop: $shortcut"}
           $shell=New-Object -ComObject WScript.Shell
           $sc=$shell.CreateShortcut($shortcut)
           if($sc.TargetPath -notlike '*LoperFamilyTreeBuilder.Launcher.exe'){throw "Desktop shortcut target is incorrect: $($sc.TargetPath)"}
