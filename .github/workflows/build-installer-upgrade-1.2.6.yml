@@ -87,7 +87,8 @@ jobs:
           $encoded = ''
           foreach ($part in @(
             "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part01.b64",
-            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part021.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part022.b64",
             "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part03.b64",
             "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part04.b64",
             "$env:GITHUB_WORKSPACE\bootstrap\overrides\combined-1.2.9.part05.b64"
