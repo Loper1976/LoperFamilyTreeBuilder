@@ -1,0 +1,41 @@
+{
+  "project": "Loper Family Tree Builder",
+  "version": "1.0.17",
+  "release_scope": "Person Profile + Editing Audit History + Protected Robert J. Loper Legacy Number UI",
+  "implemented": [
+    "Full working person profile over the current Phase 3 genealogy data foundation",
+    "Prominent protected Robert J. Loper Legacy Number display separate from internal Person ID",
+    "Edit workflow for names, birth date, death date, living status, and primary family branch",
+    "Audit history display with actor, timestamp, summary, previous JSON, and new JSON",
+    "Parent and child relationship display with direct profile navigation",
+    "Family branch membership display",
+    "Person workspace links into existing tree, archive, health, military, cemetery, geography, and research modules",
+    "Update command auditing with previous and new values",
+    "Normal edit request intentionally excludes LegacyNumber",
+    "Automated tests proving normal person editing cannot change the protected Legacy Number",
+    "Dedicated Windows cloud build and single-EXE installer workflow"
+  ],
+  "preservation_guarantees": [
+    "Legacy Number remains stored as exact historical text",
+    "Legacy Number is not used as the database primary key",
+    "Normal person editing cannot submit or replace a Legacy Number",
+    "Existing Legacy Number values are included in audit snapshots without normalization",
+    "No destructive genealogy database migration is required for this update"
+  ],
+  "not_claimed_complete_in_this_release": [
+    "Photos module",
+    "Documents module",
+    "Sources and citations module",
+    "Medical and Health module",
+    "Military module",
+    "Cemetery module",
+    "Lifetime geography module",
+    "Research module",
+    "Relationship editing UI beyond current parent-child display"
+  ],
+  "validation": {
+    "unit_tests": "Run in GitHub Actions before installer packaging",
+    "web_compile": "Run in GitHub Actions before installer packaging",
+    "installer": "Built on windows-latest as LoperFamilyTreeBuilderSetup-1.0.17.exe"
+  }
+}
