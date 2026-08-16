@@ -1,0 +1,80 @@
+name: Prepare 1.2.9 Development Source Snapshot
+
+on:
+  push:
+    branches: [ agent/combined-1.2.7-1.2.9 ]
+    paths:
+      - '.github/workflows/dev-source-snapshot-1.2.9.yml'
+      - 'bootstrap/overrides/**'
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Reassemble exact Phase 3 source package
+        shell: pwsh
+        run: |
+          $base64 = ''
+          foreach ($part in @(
+            'bootstrap/source.part01.b64',
+            'bootstrap/source.part02.b64',
+            'bootstrap/source.part03.b64',
+            'bootstrap/source.part04.b64',
+            'bootstrap/source.part05.b64',
+            'bootstrap/source.part06.b64'
+          )) {
+            $base64 += (Get-Content $part -Raw).Trim()
+          }
+          $base64 += (Get-Content 'bootstrap/source.part07a.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07b.b64' -Raw).Trim()
+          $base64 += (Get-Content 'bootstrap/source.part07c.b64' -Raw).Trim()
+          $part7d = (Get-Content 'bootstrap/source.part07d.b64' -Raw).Trim()
+          if ($part7d.Length -lt 4500) { throw 'Source part 7d is incomplete.' }
+          $base64 += $part7d.Substring(0, 4500)
+          $base64 += (Get-Content 'bootstrap/source.part08.b64' -Raw).Trim()
+
+          [IO.File]::WriteAllBytes('phase3.zip', [Convert]::FromBase64String($base64))
+          $expected = 'eed76fb56a914b1dfba9202053c7f1c3f50a089f1b70f1565157350693ae3cb4'
+          $actual = (Get-FileHash phase3.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Source SHA mismatch: $actual" }
+          Expand-Archive phase3.zip -DestinationPath source -Force
+
+      - name: Set source root
+        shell: pwsh
+        run: |
+          "SOURCE_ROOT=$env:GITHUB_WORKSPACE\source\LoperFamilyTreeBuilder_InstallerFirst_Phase3" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Apply current 1.2.6 application feature patch
+        shell: pwsh
+        run: |
+          $encoded = ''
+          foreach ($part in @(
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.part01.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.part02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail01.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail02.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail03.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail04.b64",
+            "$env:GITHUB_WORKSPACE\bootstrap\overrides\person-profile-update.tail05.b64"
+          )) {
+            $encoded += (Get-Content $part -Raw).Trim()
+          }
+          $scriptPath = Join-Path $env:RUNNER_TEMP 'apply-current-feature-update.ps1'
+          [IO.File]::WriteAllBytes($scriptPath, [Convert]::FromBase64String($encoded))
+          $expectedPatch = '73dd054ca4fae76736be661be238486e2ef1d0d6e3c2da8937aeef25c6d89f59'
+          $actualPatch = (Get-FileHash $scriptPath -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualPatch -ne $expectedPatch) { throw "Patch SHA mismatch: $actualPatch" }
+          & $scriptPath -SourceRoot $env:SOURCE_ROOT
+          if (-not $?) { throw 'Current feature patch failed.' }
+
+      - name: Upload reconstructed source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-DevSource-1.2.6-base
+          path: source/LoperFamilyTreeBuilder_InstallerFirst_Phase3
+          if-no-files-found: error
+          retention-days: 1
