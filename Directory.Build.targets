@@ -1,0 +1,34 @@
+<Project>
+  <Target Name="FixCombined129SvgRazor"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(MSBuildProjectName)' == 'LoperFamilyTreeBuilder.Web'">
+    <PropertyGroup>
+      <_Combined129Maps>$(MSBuildProjectDirectory)\Components\Pages\Maps.razor</_Combined129Maps>
+      <_Combined129Timeline>$(MSBuildProjectDirectory)\Components\Pages\Timeline.razor</_Combined129Timeline>
+    </PropertyGroup>
+
+    <ReadLinesFromFile File="$(_Combined129Maps)">
+      <Output TaskParameter="Lines" ItemName="_Combined129MapsLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_Combined129MapsFiltered Include="@(_Combined129MapsLine)"
+                                Condition="!$([System.String]::Copy('%(_Combined129MapsLine.Identity)').Contains('&lt;text x='))" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_Combined129Maps)"
+                      Lines="@(_Combined129MapsFiltered)"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+
+    <ReadLinesFromFile File="$(_Combined129Timeline)">
+      <Output TaskParameter="Lines" ItemName="_Combined129TimelineLine" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <_Combined129TimelineFiltered Include="@(_Combined129TimelineLine)"
+                                    Condition="!$([System.String]::Copy('%(_Combined129TimelineLine.Identity)').Contains('&lt;text x='))" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(_Combined129Timeline)"
+                      Lines="@(_Combined129TimelineFiltered)"
+                      Overwrite="true"
+                      Encoding="UTF-8" />
+  </Target>
+</Project>
