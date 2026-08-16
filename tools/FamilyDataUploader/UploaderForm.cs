@@ -30,8 +30,9 @@ public sealed class UploaderForm : Form
         var top = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, Padding = new Padding(16) };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        top.Controls.Add(new Label { Text = "Source folder", AutoSize = true }, 0, 0);
-        top.SetColumnSpan(top.Controls[^1], 2);
+        var sourceLabel = new Label { Text = "Source folder", AutoSize = true };
+        top.Controls.Add(sourceLabel, 0, 0);
+        top.SetColumnSpan(sourceLabel, 2);
         top.Controls.Add(_source, 0, 1);
         top.Controls.Add(_choose, 1, 1);
 
@@ -148,6 +149,9 @@ public sealed class UploaderForm : Form
                 await RunAsync("git", ["-C", repo, "pull", "--ff-only", "origin", "main"]);
             }
 
+            await RunAsync("git", ["-C", repo, "config", "user.name", "Phil Loper"]);
+            await RunAsync("git", ["-C", repo, "config", "user.email", "phil@loper.com"]);
+
             Append("Checking Git LFS...");
             await RunAsync("git", ["-C", repo, "lfs", "install", "--local"]);
 
@@ -174,19 +178,16 @@ public sealed class UploaderForm : Form
                 _progress.Value = i + 1;
             }
 
-            var manifest = new UploadManifest(
-                batchId,
-                DateTimeOffset.Now,
-                _files.Count,
-                _files.Sum(f => f.Size),
-                "Loper Family Data Uploader",
-                _files);
-
+            var manifest = new UploadManifest(batchId, DateTimeOffset.Now, _files.Count, _files.Sum(f => f.Size), "Loper Family Data Uploader", _files);
             await File.WriteAllTextAsync(Path.Combine(batchRoot, "manifest.json"), JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
             await File.WriteAllTextAsync(Path.Combine(batchRoot, "README.md"), $"# Import batch {batchId}\n\nCreated by Loper Family Data Uploader.\n\nFiles: {_files.Count:N0}\nTotal bytes: {_files.Sum(f => f.Size):N0}\n\nOriginal relative paths are preserved under `originals/`. See `manifest.json` for SHA-256 hashes and duplicate-content references.\n");
 
             Append("Staging preserved originals and manifest...");
-            await RunAsync("git", ["-C", repo, "add", ".gitattributes", $"INBOX/{batchId}"] , allowMissingPath: true);
+            await RunAsync("git", ["-C", repo, "add", $"INBOX/{batchId}"]);
+            var attributesPath = Path.Combine(repo, ".gitattributes");
+            if (File.Exists(attributesPath))
+                await RunAsync("git", ["-C", repo, "add", ".gitattributes"]);
+
             await RunAsync("git", ["-C", repo, "commit", "-m", $"Import family data batch {batchId}"]);
             Append("Uploading to private GitHub family archive...");
             await RunAsync("git", ["-C", repo, "push", "origin", "main"]);
@@ -202,7 +203,7 @@ public sealed class UploaderForm : Form
         finally { SetBusy(false); }
     }
 
-    private async Task RunAsync(string fileName, IEnumerable<string> args, bool allowMissingPath = false)
+    private async Task RunAsync(string fileName, IEnumerable<string> args)
     {
         var psi = new ProcessStartInfo(fileName) { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
         foreach (var arg in args) psi.ArgumentList.Add(arg);
@@ -212,7 +213,7 @@ public sealed class UploaderForm : Form
         await process.WaitForExitAsync();
         if (!string.IsNullOrWhiteSpace(stdout)) Append(stdout.Trim());
         if (!string.IsNullOrWhiteSpace(stderr)) Append(stderr.Trim());
-        if (process.ExitCode != 0 && !(allowMissingPath && stderr.Contains("pathspec", StringComparison.OrdinalIgnoreCase)))
+        if (process.ExitCode != 0)
             throw new InvalidOperationException($"{fileName} exited with code {process.ExitCode}. {stderr}".Trim());
     }
 
@@ -227,7 +228,7 @@ public sealed class UploaderForm : Form
 
     private void Append(string text)
     {
-        if (InvokeRequired) { BeginInvoke(() => Append(text)); return; }
+        if (InvokeRequired) { BeginInvoke(new Action(() => Append(text))); return; }
         _log.AppendText($"[{DateTime.Now:HH:mm:ss}] {text}{Environment.NewLine}");
     }
 
