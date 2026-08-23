@@ -1,0 +1,18 @@
+<Project Sdk="WixToolset.Sdk/4.0.6">
+  <PropertyGroup>
+    <OutputName>LoperFamilyTreeBuilder</OutputName>
+    <DefineConstants>PayloadDir=$(PayloadDir)</DefineConstants>
+    <Platform>x64</Platform>
+  </PropertyGroup>
+  <ItemGroup>
+    <HarvestDirectory Include="$(PayloadDir)\app">
+      <ComponentGroupName>ApplicationFiles</ComponentGroupName>
+      <DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+      <SuppressRootDirectory>true</SuppressRootDirectory>
+      <SuppressRegistry>true</SuppressRegistry>
+      <SuppressCom>true</SuppressCom>
+    </HarvestDirectory>
+    <BindPath Include="$(PayloadDir)\app" />
+    <PackageReference Include="WixToolset.Heat" Version="4.0.6" />
+  </ItemGroup>
+</Project>

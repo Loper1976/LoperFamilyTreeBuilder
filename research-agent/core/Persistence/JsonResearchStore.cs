@@ -2,10 +2,11 @@ using System.Text.Json;
 using ResearchAgent.Core.Domain;
 using ResearchAgent.Core.Proof;
 using ResearchAgent.Core.Research;
+using ResearchAgent.Core.UI;
 
 namespace ResearchAgent.Core.Persistence;
 
-public sealed class JsonResearchStore : IResearchStore
+public sealed class JsonResearchStore : IResearchCenterQueryStore
 {
     private readonly string _root;
     private readonly JsonSerializerOptions _json = new() { WriteIndented = true };
@@ -34,6 +35,21 @@ public sealed class JsonResearchStore : IResearchStore
     public async Task<IReadOnlyList<ResearchTask>> GetOpenTasksAsync(Guid? personId = null, CancellationToken ct = default) =>
         (await LoadAllAsync<ResearchTask>("research-tasks", ct))
             .Where(x => x.Status == ResearchTaskStatus.Open && (personId is null || x.SubjectPersonId == personId)).ToArray();
+
+    public async Task<IReadOnlyList<ResearchClaim>> GetClaimsForPersonAsync(Guid personId, CancellationToken ct = default) =>
+        (await LoadAllAsync<ResearchClaim>("claims", ct)).Where(x => x.SubjectPersonId == personId).ToArray();
+
+    public async Task<int> GetSourceCountForPersonAsync(Guid personId, CancellationToken ct = default)
+    {
+        var claimIds = (await GetClaimsForPersonAsync(personId, ct)).Select(x => x.Id).ToHashSet();
+        var citationIds = (await LoadAllAsync<EvidenceLink>("evidence", ct))
+            .Where(x => claimIds.Contains(x.ClaimId)).Select(x => x.CitationId).ToHashSet();
+        return (await LoadAllAsync<Citation>("citations", ct))
+            .Where(x => citationIds.Contains(x.Id)).Select(x => x.SourceId).Distinct().Count();
+    }
+
+    public async Task<int> GetProofPacketCountForPersonAsync(Guid personId, CancellationToken ct = default) =>
+        (await LoadAllAsync<ProofPacket>("proof-packets", ct)).Count(x => x.SubjectPersonId == personId);
 
     private async Task SaveAsync<T>(string area, Guid id, T value, CancellationToken ct)
     {

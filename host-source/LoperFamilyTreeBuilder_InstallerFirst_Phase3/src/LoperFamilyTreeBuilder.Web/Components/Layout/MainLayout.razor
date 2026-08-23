@@ -1,0 +1,28 @@
+@inherits LayoutComponentBase
+
+<div class="app-shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">L</div>
+            <div>
+                <div class="brand-title">Loper Family Tree</div>
+                <div class="brand-subtitle">Builder</div>
+            </div>
+        </div>
+
+        <NavMenu />
+    </aside>
+
+    <main class="main-workspace">
+        <header class="topbar">
+            <div>
+                <strong>Family Archive Work Center</strong>
+            </div>
+            <div class="topbar-status">Local archive</div>
+        </header>
+
+        <section class="content">
+            @Body
+        </section>
+    </main>
+</div>

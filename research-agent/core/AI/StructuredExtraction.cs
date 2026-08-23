@@ -29,8 +29,9 @@ public sealed class StructuredModelExtractor(IStructuredModelClient client, Rout
         if (!PrivacyRouter.IsTierAllowed(source.PrivacyClass, client.Tier, policy))
             throw new InvalidOperationException($"Provider tier {client.Tier} is not permitted for {source.PrivacyClass} data.");
 
-        var extension = Path.GetExtension(archivedAbsolutePath).ToLowerInvariant();
-        if (extension is not ".txt" and not ".csv" and not ".json" and not ".ged")
+        var extension = Path.GetExtension(source.OriginalFileName).ToLowerInvariant();
+        var isTextMime = source.MimeType?.StartsWith("text/", StringComparison.OrdinalIgnoreCase) == true;
+        if (!isTextMime && extension is not ".txt" and not ".csv" and not ".json" and not ".ged")
             throw new NotSupportedException("This structured extractor currently accepts text-bearing inputs only. Vision/PDF adapters are separate providers.");
 
         var text = await File.ReadAllTextAsync(archivedAbsolutePath, cancellationToken);

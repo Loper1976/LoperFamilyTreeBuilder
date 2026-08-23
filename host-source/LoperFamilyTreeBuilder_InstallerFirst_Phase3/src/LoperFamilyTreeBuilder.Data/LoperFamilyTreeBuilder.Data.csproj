@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>LoperFamilyTreeBuilder.Data</AssemblyName>
+    <RootNamespace>LoperFamilyTreeBuilder.Data</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Infrastructure\LoperFamilyTreeBuilder.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\..\..\research-agent\core\ResearchAgent.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.10" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.10">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.10" />
+  </ItemGroup>
+</Project>

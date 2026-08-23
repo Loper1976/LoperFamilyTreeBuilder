@@ -1,0 +1,45 @@
+name: Alpha clean Windows validation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/genealogy-agent-p0
+
+permissions:
+  contents: read
+
+jobs:
+  clean-install:
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Test and build Alpha bundle
+        shell: pwsh
+        run: ./Build-Alpha.ps1 -ArtifactRoot "$env:RUNNER_TEMP/LoperFamilyTreeBuilder-Alpha"
+
+      - name: Validate clean bundle install and uninstall
+        shell: pwsh
+        run: >-
+          ./scripts/Validate-CleanInstall.ps1
+          -BundlePath "$env:RUNNER_TEMP/LoperFamilyTreeBuilder-Alpha/setup/LoperFamilyTreeBuilderSetup.exe"
+          -EvidenceRoot "$env:RUNNER_TEMP/LoperFamilyTreeBuilder-CleanInstall"
+
+      - name: Upload installer and validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LoperFamilyTreeBuilder-Alpha-Windows
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/LoperFamilyTreeBuilder-Alpha/setup/LoperFamilyTreeBuilderSetup.exe
+            ${{ runner.temp }}/LoperFamilyTreeBuilder-CleanInstall/*

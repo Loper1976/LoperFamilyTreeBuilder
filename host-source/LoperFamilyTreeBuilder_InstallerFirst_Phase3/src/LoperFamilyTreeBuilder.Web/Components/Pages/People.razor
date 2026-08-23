@@ -1,0 +1,258 @@
+@page "/people"
+@rendermode InteractiveServer
+@inject PeopleQueryService PeopleQuery
+@inject FamilyBranchQueryService BranchQuery
+@inject NavigationManager Navigation
+
+<PageTitle>People - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>People</h1>
+        <p>Search and manage the family archive without loading every detailed record.</p>
+    </div>
+
+    <button class="primary-action"
+            @onclick="OpenAddPerson">
+        Add Person
+    </button>
+</div>
+
+<section class="page-card people-filter-card">
+    <div class="people-filter-grid">
+        <div>
+            <label>Search</label>
+            <input @bind="_request.SearchText"
+                   @bind:event="oninput"
+                   placeholder="Name, Legacy Number, or keyword" />
+        </div>
+
+        <div>
+            <label>Surname</label>
+            <input @bind="_request.Surname"
+                   @bind:event="oninput"
+                   placeholder="Starts with..." />
+        </div>
+
+        <div>
+            <label>Legacy Number</label>
+            <input @bind="_request.LegacyNumberPrefix"
+                   @bind:event="oninput"
+                   placeholder="Exact or prefix" />
+        </div>
+
+        <div>
+            <label>Family Branch</label>
+            <select @bind="_selectedBranch">
+                <option value="">All branches</option>
+                @foreach (var branch in _branches)
+                {
+                    <option value="@branch.Id">@branch.Name</option>
+                }
+            </select>
+        </div>
+
+        <div>
+            <label>Status</label>
+            <select @bind="_request.LivingStatus">
+                <option value="@LivingStatusFilter.All">All</option>
+                <option value="@LivingStatusFilter.Living">Living</option>
+                <option value="@LivingStatusFilter.Deceased">Deceased</option>
+            </select>
+        </div>
+
+        <div>
+            <label>Sort</label>
+            <select @bind="_request.SortBy">
+                <option value="surname">Surname</option>
+                <option value="given">Given name</option>
+                <option value="birth">Birth date</option>
+            </select>
+        </div>
+
+        <div class="filter-actions">
+            <button class="primary-action" @onclick="SearchAsync">
+                Search
+            </button>
+            <button class="secondary-action" @onclick="ClearAsync">
+                Clear
+            </button>
+        </div>
+    </div>
+</section>
+
+@if (_loading)
+{
+    <div class="page-card">Loading people...</div>
+}
+else if (_result is null || _result.TotalCount == 0)
+{
+    <div class="page-card empty-state">
+        <h2>No people found</h2>
+        <p>Adjust the filters or add the first person to the new archive.</p>
+    </div>
+}
+else
+{
+    <section class="page-card people-table-card">
+        <div class="table-toolbar">
+            <div>
+                <strong>@_result.TotalCount</strong> people found
+            </div>
+            <div>
+                Page @_result.Page of @_result.TotalPages
+            </div>
+        </div>
+
+        <div class="table-scroll">
+            <table class="people-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Legacy Number</th>
+                        <th>Branch</th>
+                        <th>Born</th>
+                        <th>Died</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var person in _result.Items)
+                    {
+                        <tr>
+                            <td>
+                                <a href="@($"/people/{person.Id}")">
+                                    @person.DisplayName
+                                </a>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(person.LegacyNumber))
+                                {
+                                    <span class="legacy-number">
+                                        @person.LegacyNumber
+                                    </span>
+                                }
+                            </td>
+                            <td>@person.PrimaryBranchName</td>
+                            <td>@FormatDate(person.BirthDate)</td>
+                            <td>@FormatDate(person.DeathDate)</td>
+                            <td>
+                                <span class="status-pill">
+                                    @(person.IsLiving ? "Living" : "Deceased")
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button class="secondary-action"
+                    disabled="@(!_result.HasPreviousPage)"
+                    @onclick="PreviousPageAsync">
+                Previous
+            </button>
+
+            <span>
+                Page @_result.Page of @_result.TotalPages
+            </span>
+
+            <button class="secondary-action"
+                    disabled="@(!_result.HasNextPage)"
+                    @onclick="NextPageAsync">
+                Next
+            </button>
+        </div>
+    </section>
+}
+
+@code {
+    private void OpenAddPerson() => Navigation.NavigateTo("/people/add");
+
+    private PeopleSearchRequest _request = new();
+    private PagedResult<PersonListItem>? _result;
+    private IReadOnlyList<FamilyBranchListItem> _branches = [];
+    private bool _loading;
+    private string _selectedBranch = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await BranchQuery.GetAllAsync();
+        await SearchAsync();
+    }
+
+    private async Task SearchAsync()
+    {
+        _loading = true;
+
+        try
+        {
+            _request.Page = 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        _request = new PeopleSearchRequest();
+        _selectedBranch = string.Empty;
+        await SearchAsync();
+    }
+
+    private async Task PreviousPageAsync()
+    {
+        if (_result is null || !_result.HasPreviousPage)
+            return;
+
+        _loading = true;
+
+        try
+        {
+            _request.Page = _result.Page - 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task NextPageAsync()
+    {
+        if (_result is null || !_result.HasNextPage)
+            return;
+
+        _loading = true;
+
+        try
+        {
+            _request.Page = _result.Page + 1;
+            ApplyBranchFilter();
+            _result = await PeopleQuery.SearchAsync(_request);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void ApplyBranchFilter()
+    {
+        _request.FamilyBranchId =
+            Guid.TryParse(_selectedBranch, out var branchId)
+                ? branchId
+                : null;
+    }
+
+    private static string FormatDate(DateOnly? date)
+    {
+        return date?.ToString("MM/dd/yyyy") ?? string.Empty;
+    }
+}

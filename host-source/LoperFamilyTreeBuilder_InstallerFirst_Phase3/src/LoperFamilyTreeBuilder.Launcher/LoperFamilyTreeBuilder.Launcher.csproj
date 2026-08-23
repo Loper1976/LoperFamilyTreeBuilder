@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>LoperFamilyTreeBuilder.Launcher</AssemblyName>
+    <RootNamespace>LoperFamilyTreeBuilder.Launcher</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Infrastructure\LoperFamilyTreeBuilder.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

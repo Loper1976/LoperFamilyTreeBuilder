@@ -1,0 +1,22 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <Package Name="Loper Family Tree Builder"
+           Manufacturer="Phil Loper"
+           Version="1.0.0"
+           UpgradeCode="{4BDBF4F0-7C82-4FA5-B0B0-6E6CA04E80E9}"
+           Scope="perMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Loper Family Tree Builder is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="Loper Family Tree Builder" />
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Loper Family Tree Builder" Level="1">
+      <ComponentGroupRef Id="ApplicationFiles" />
+    </Feature>
+
+  </Package>
+</Wix>

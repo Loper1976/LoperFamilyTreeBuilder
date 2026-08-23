@@ -2,6 +2,7 @@ using ResearchAgent.Core.Domain;
 using ResearchAgent.Core.Evidence;
 using ResearchAgent.Core.Persistence;
 using ResearchAgent.Core.Research;
+using ResearchAgent.Core.Integration;
 
 namespace ResearchAgent.Core.UI;
 
@@ -12,7 +13,7 @@ public interface IResearchCenterQueryStore : IResearchStore
     Task<int> GetProofPacketCountForPersonAsync(Guid personId, CancellationToken cancellationToken = default);
 }
 
-public sealed class ResearchCenterService(IResearchCenterQueryStore store, Func<Guid, string> displayNameResolver) : IResearchCenterService
+public sealed class ResearchCenterService(IResearchCenterQueryStore store, IHostPersonReader personReader) : IResearchCenterService
 {
     public async Task<ResearchCenterSummary> GetSummaryAsync(Guid personId, CancellationToken cancellationToken = default)
     {
@@ -32,7 +33,8 @@ public sealed class ResearchCenterService(IResearchCenterQueryStore store, Func<
             ranked.TryGetValue(t.Id, out var p) ? p.PriorityScore : 0m, t.Status))
             .OrderByDescending(t => t.PriorityScore).ToArray();
 
-        return new(personId, displayNameResolver(personId),
+        var person = await personReader.GetPersonAsync(personId, cancellationToken);
+        return new(personId, person?.DisplayName ?? "Unknown person",
             await store.GetSourceCountForPersonAsync(personId, cancellationToken),
             claims.Count(c => c.Status is ClaimStatus.Unverified or ClaimStatus.Possible or ClaimStatus.Probable),
             conflicts.Count, tasks.Count,

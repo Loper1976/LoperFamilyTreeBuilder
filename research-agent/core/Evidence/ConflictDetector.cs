@@ -29,5 +29,7 @@ public static class ConflictDetector
     }
 
     private static string Normalize(string value) => string.Join(' ', value.Trim().ToLowerInvariant().Split(' ', StringSplitOptions.RemoveEmptyEntries));
-    private static bool IsMajor(string type) => type.Contains("parent") || type.Contains("birth") || type.Contains("death") || type.Contains("spouse");
+    private static bool IsMajor(string type) =>
+        type.Contains("parent") || type.Contains("father") || type.Contains("mother") ||
+        type.Contains("birth") || type.Contains("death") || type.Contains("spouse");
 }

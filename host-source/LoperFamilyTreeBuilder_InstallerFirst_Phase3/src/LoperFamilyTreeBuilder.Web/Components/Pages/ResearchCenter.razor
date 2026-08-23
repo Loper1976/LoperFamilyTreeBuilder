@@ -1,0 +1,87 @@
+@page "/research-center"
+@page "/research-center/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject IResearchCenterService Center
+@inject IHostPersonReader People
+@inject ResearchCommandService Commands
+@inject IResearchStore Store
+
+<PageTitle>Research Center - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header"><div><h1>Research Center</h1><p>Proposed findings remain separate from the accepted family tree.</p></div></div>
+
+@if (!PersonId.HasValue)
+{
+    <section class="page-card"><p>Open a person profile and choose <strong>Research This Person</strong>.</p></section>
+}
+else if (_loading)
+{
+    <section class="page-card">Loading research workspace...</section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error">@_error</div>
+}
+else if (_summary is not null)
+{
+    <section class="page-card">
+        <div class="section-title"><h2>@_summary.DisplayName</h2><p>Stable person ID: @PersonId</p></div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_summary.SourceCount</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.OpenClaimCount</div><div class="summary-label">Open findings</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.ConflictCount</div><div class="summary-label">Conflicts</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.OpenTaskCount</div><div class="summary-label">Tasks</div></div>
+        </div>
+        <button class="primary-action" disabled="@_running" @onclick="StartAsync">@(_running ? "Planning..." : "Research This Person")</button>
+        @if (!string.IsNullOrWhiteSpace(_status)) { <div class="alert alert-success">@_status</div> }
+    </section>
+
+    <section class="page-card"><div class="section-title"><h2>Research queue</h2></div>
+        @if (_summary.Tasks.Count == 0) { <p class="muted">No open research tasks.</p> }
+        else { @foreach (var task in _summary.Tasks) { <div class="queue-row"><span>@task.Question</span><strong>@task.PriorityScore.ToString("0")</strong></div> } }
+    </section>
+}
+
+@code {
+    [Parameter] public Guid? PersonId { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public bool StartRequested { get; set; }
+    private ResearchCenterSummary? _summary;
+    private bool _loading = true;
+    private bool _running;
+    private string _error = string.Empty;
+    private string _status = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!PersonId.HasValue) { _loading = false; return; }
+        try
+        {
+            await RefreshAsync();
+            if (StartRequested && _summary?.Tasks.Count == 0) await StartAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task StartAsync()
+    {
+        if (!PersonId.HasValue) return;
+        _running = true; _error = string.Empty; _status = string.Empty;
+        try
+        {
+            var person = await People.GetPersonAsync(PersonId.Value) ?? throw new InvalidOperationException("Person not found.");
+            var profile = new PersonResearchProfile(person.StablePersonId, person.DisplayName,
+                person.BirthDate, person.BirthPlace, person.DeathDate, person.DeathPlace,
+                false, false, [], []);
+            var privacy = person.DeathDate.HasValue ? PrivacyClass.PublicHistorical : PrivacyClass.LivingPersonSensitive;
+            var result = await Commands.ResearchThisPersonAsync(new StartResearchRequest(profile, privacy));
+            foreach (var task in result.Plan.Tasks) await Store.SaveResearchTaskAsync(task);
+            _status = $"Created {result.Plan.Tasks.Count} proposal-first research tasks. No accepted-tree facts were changed.";
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+
+    private async Task RefreshAsync() => _summary = await Center.GetSummaryAsync(PersonId!.Value);
+}

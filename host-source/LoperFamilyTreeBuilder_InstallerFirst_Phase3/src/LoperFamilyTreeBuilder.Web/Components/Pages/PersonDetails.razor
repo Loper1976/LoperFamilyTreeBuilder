@@ -1,0 +1,486 @@
+@page "/people/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject PersonProfileQueryService ProfileQuery
+@inject PersonCommandService PersonCommand
+@inject FamilyBranchQueryService BranchQuery
+@inject NavigationManager Navigation
+
+<PageTitle>@(_profile?.DisplayName ?? "Person") - Loper Family Tree Builder</PageTitle>
+
+@if (_loading)
+{
+    <div class="page-card">Loading person profile...</div>
+}
+else if (_profile is null)
+{
+    <div class="page-card empty-state">
+        <h1>Person not found</h1>
+        <p>The requested person record does not exist.</p>
+        <button class="secondary-action" @onclick="BackToPeople">Back to People</button>
+    </div>
+}
+else
+{
+    <div class="person-profile-shell">
+        <section class="person-hero">
+            <div>
+                <div class="eyebrow">PERSON PROFILE</div>
+                <h1>@_profile.DisplayName</h1>
+                <div class="person-meta-line">
+                    <span class="status-pill">@(_profile.IsLiving ? "Living" : "Deceased")</span>
+                    @if (_profile.PrimaryBranchId.HasValue)
+                    {
+                        var primaryBranch = _profile.Branches.FirstOrDefault(branch => branch.IsPrimary);
+                        if (primaryBranch is not null)
+                        {
+                            <span>@primaryBranch.Name branch</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="person-hero-actions">
+                @if (!string.IsNullOrEmpty(_profile.LegacyNumber))
+                {
+                    <div class="legacy-lock-card" title="Protected historical identifier">
+                        <span class="legacy-lock-label">ROBERT J. LOPER LEGACY NUMBER</span>
+                        <strong>@_profile.LegacyNumber</strong>
+                        <span class="legacy-lock-note">Protected • read only</span>
+                    </div>
+                }
+
+                @if (!_editing)
+                {
+                    <button class="primary-action" @onclick="BeginEdit">Edit Person</button>
+                    <button class="secondary-action" @onclick="ResearchPerson">Research This Person</button>
+                }
+            </div>
+        </section>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert alert-error">@_error</div>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_success))
+        {
+            <div class="alert alert-success">@_success</div>
+        }
+
+        @if (_editing)
+        {
+            <section class="page-card profile-edit-card">
+                <div class="section-title">
+                    <h2>Edit Person</h2>
+                    <p>
+                        Core genealogy fields can be edited here. The Robert J. Loper Legacy Number
+                        is intentionally excluded from normal editing.
+                    </p>
+                </div>
+
+                <EditForm Model="_edit" OnValidSubmit="SaveAsync">
+                    <DataAnnotationsValidator />
+                    <ValidationSummary />
+
+                    <div class="form-grid">
+                        <div>
+                            <label>Given name</label>
+                            <InputText @bind-Value="_edit.GivenName" />
+                        </div>
+
+                        <div>
+                            <label>Middle name</label>
+                            <InputText @bind-Value="_edit.MiddleName" />
+                        </div>
+
+                        <div>
+                            <label>Surname</label>
+                            <InputText @bind-Value="_edit.Surname" />
+                        </div>
+
+                        <div>
+                            <label>Suffix</label>
+                            <InputText @bind-Value="_edit.Suffix" />
+                        </div>
+
+                        <div>
+                            <label>Birth date</label>
+                            <InputDate @bind-Value="_edit.BirthDate" />
+                        </div>
+
+                        <div>
+                            <label>Death date</label>
+                            <InputDate @bind-Value="_edit.DeathDate" />
+                        </div>
+
+                        <div>
+                            <label>Primary family branch</label>
+                            <InputSelect @bind-Value="_edit.PrimaryFamilyBranchId">
+                                <option value="">No primary branch</option>
+                                @foreach (var branch in _branches)
+                                {
+                                    <option value="@branch.Id">@branch.Name</option>
+                                }
+                            </InputSelect>
+                        </div>
+
+                        <div>
+                            <label>Robert J. Loper Legacy Number</label>
+                            <div class="protected-field">
+                                @(_profile.LegacyNumber ?? "No historical Legacy Number recorded")
+                            </div>
+                            <small>
+                                Immutable historical data. It cannot be changed from this screen.
+                            </small>
+                        </div>
+
+                        <div class="living-check">
+                            <InputCheckbox @bind-Value="_edit.IsLiving" />
+                            <label>Living person</label>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button type="button"
+                                class="secondary-action"
+                                @onclick="CancelEdit">
+                            Cancel
+                        </button>
+
+                        <button type="submit"
+                                class="primary-action"
+                                disabled="@_saving">
+                            @(_saving ? "Saving..." : "Save Changes")
+                        </button>
+                    </div>
+                </EditForm>
+            </section>
+        }
+
+        <div class="profile-grid">
+            <section class="page-card">
+                <div class="section-title">
+                    <h2>Overview</h2>
+                </div>
+
+                <dl class="profile-facts">
+                    <div>
+                        <dt>Full name</dt>
+                        <dd>@_profile.DisplayName</dd>
+                    </div>
+                    <div>
+                        <dt>Birth</dt>
+                        <dd>@FormatDate(_profile.BirthDate)</dd>
+                    </div>
+                    <div>
+                        <dt>Death</dt>
+                        <dd>@FormatDate(_profile.DeathDate)</dd>
+                    </div>
+                    <div>
+                        <dt>Status</dt>
+                        <dd>@(_profile.IsLiving ? "Living" : "Deceased")</dd>
+                    </div>
+                    <div>
+                        <dt>Internal Person ID</dt>
+                        <dd><code>@_profile.Id</code></dd>
+                    </div>
+                    <div>
+                        <dt>Last modified</dt>
+                        <dd>@_profile.ModifiedUtc.ToLocalTime().ToString("g")</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="page-card">
+                <div class="section-title">
+                    <h2>Family Branches</h2>
+                </div>
+
+                @if (_profile.Branches.Count == 0)
+                {
+                    <p class="muted">No family branch has been assigned.</p>
+                }
+                else
+                {
+                    <div class="tag-list">
+                        @foreach (var branch in _profile.Branches)
+                        {
+                            <span class="branch-tag">
+                                @branch.Name
+                                @if (branch.IsPrimary)
+                                {
+                                    <strong>Primary</strong>
+                                }
+                            </span>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <div class="profile-grid">
+            <section class="page-card">
+                <div class="section-title">
+                    <h2>Parents</h2>
+                </div>
+                @if (_profile.Parents.Count == 0)
+                {
+                    <p class="muted">No parent relationships are recorded.</p>
+                }
+                else
+                {
+                    <div class="relationship-list">
+                        @foreach (var parent in _profile.Parents)
+                        {
+                            <a href="@($"/people/{parent.PersonId}")" class="relationship-row">
+                                <div>
+                                    <strong>@parent.DisplayName</strong>
+                                    <small>@parent.RelationshipType parent</small>
+                                </div>
+                                @if (!string.IsNullOrEmpty(parent.LegacyNumber))
+                                {
+                                    <span class="legacy-number">@parent.LegacyNumber</span>
+                                }
+                            </a>
+                        }
+                    </div>
+                }
+            </section>
+
+            <section class="page-card">
+                <div class="section-title">
+                    <h2>Children</h2>
+                </div>
+                @if (_profile.Children.Count == 0)
+                {
+                    <p class="muted">No child relationships are recorded.</p>
+                }
+                else
+                {
+                    <div class="relationship-list">
+                        @foreach (var child in _profile.Children)
+                        {
+                            <a href="@($"/people/{child.PersonId}")" class="relationship-row">
+                                <div>
+                                    <strong>@child.DisplayName</strong>
+                                    <small>@child.RelationshipType child</small>
+                                </div>
+                                @if (!string.IsNullOrEmpty(child.LegacyNumber))
+                                {
+                                    <span class="legacy-number">@child.LegacyNumber</span>
+                                }
+                            </a>
+                        }
+                    </div>
+                }
+            </section>
+        </div>
+
+        <section class="page-card">
+            <div class="section-title">
+                <h2>Person Workspace</h2>
+                <p>Open the major archive areas for this person without leaving the application shell.</p>
+            </div>
+
+            <div class="profile-module-grid">
+                <a href="@($"/family-tree?person={PersonId}")">Family Tree</a>
+                <a href="@($"/documents?person={PersonId}")">Documents</a>
+                <a href="@($"/photos?person={PersonId}")">Photos</a>
+                <a href="@($"/sources?person={PersonId}")">Sources & Citations</a>
+                <a href="@($"/medical?person={PersonId}")">Medical & Health</a>
+                <a href="@($"/military?person={PersonId}")">Military</a>
+                <a href="@($"/cemeteries?person={PersonId}")">Cemetery</a>
+                <a href="@($"/maps?person={PersonId}")">Lifetime Geography</a>
+                <a href="@($"/research-tasks?person={PersonId}")">Research</a>
+            </div>
+        </section>
+
+        <section class="page-card">
+            <div class="section-title audit-heading">
+                <div>
+                    <h2>Audit History</h2>
+                    <p>Latest 100 recorded changes for this person.</p>
+                </div>
+                <span class="audit-count">@_profile.AuditHistory.Count events</span>
+            </div>
+
+            @if (_profile.AuditHistory.Count == 0)
+            {
+                <p class="muted">No audit events have been recorded for this person.</p>
+            }
+            else
+            {
+                <div class="audit-list">
+                    @foreach (var audit in _profile.AuditHistory)
+                    {
+                        <details class="audit-entry">
+                            <summary>
+                                <div>
+                                    <strong>@audit.Action</strong>
+                                    <span>@audit.Summary</span>
+                                </div>
+                                <div class="audit-meta">
+                                    <span>@audit.Actor</span>
+                                    <time>@audit.OccurredUtc.ToLocalTime().ToString("g")</time>
+                                </div>
+                            </summary>
+
+                            @if (!string.IsNullOrWhiteSpace(audit.PreviousValueJson) ||
+                                 !string.IsNullOrWhiteSpace(audit.NewValueJson))
+                            {
+                                <div class="audit-json-grid">
+                                    <div>
+                                        <h3>Previous value</h3>
+                                        <pre>@(audit.PreviousValueJson ?? "Not applicable")</pre>
+                                    </div>
+                                    <div>
+                                        <h3>New value</h3>
+                                        <pre>@(audit.NewValueJson ?? "Not applicable")</pre>
+                                    </div>
+                                </div>
+                            }
+                        </details>
+                    }
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public Guid PersonId { get; set; }
+
+    private PersonProfileModel? _profile;
+    private IReadOnlyList<FamilyBranchListItem> _branches = [];
+    private readonly EditPersonFormModel _edit = new();
+    private bool _loading = true;
+    private bool _editing;
+    private bool _saving;
+    private string _error = string.Empty;
+    private string _success = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = string.Empty;
+
+        try
+        {
+            _branches = await BranchQuery.GetAllAsync();
+            _profile = await ProfileQuery.GetAsync(PersonId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void BeginEdit()
+    {
+        if (_profile is null)
+            return;
+
+        _edit.GivenName = _profile.GivenName;
+        _edit.MiddleName = _profile.MiddleName;
+        _edit.Surname = _profile.Surname;
+        _edit.Suffix = _profile.Suffix;
+        _edit.BirthDate = _profile.BirthDate;
+        _edit.DeathDate = _profile.DeathDate;
+        _edit.IsLiving = _profile.IsLiving;
+        _edit.PrimaryFamilyBranchId = _profile.PrimaryBranchId;
+
+        _error = string.Empty;
+        _success = string.Empty;
+        _editing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _editing = false;
+        _error = string.Empty;
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = string.Empty;
+        _success = string.Empty;
+
+        try
+        {
+            await PersonCommand.UpdateAsync(
+                PersonId,
+                new UpdatePersonRequest
+                {
+                    GivenName = _edit.GivenName,
+                    MiddleName = _edit.MiddleName,
+                    Surname = _edit.Surname,
+                    Suffix = _edit.Suffix,
+                    BirthDate = _edit.BirthDate,
+                    DeathDate = _edit.DeathDate,
+                    IsLiving = _edit.DeathDate.HasValue
+                        ? false
+                        : _edit.IsLiving,
+                    PrimaryFamilyBranchId = _edit.PrimaryFamilyBranchId
+                },
+                actor: "Local Application");
+
+            _editing = false;
+            await LoadAsync();
+            _success = "Person record saved. The change was added to Audit History.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void BackToPeople()
+    {
+        Navigation.NavigateTo("/people");
+    }
+
+    private void ResearchPerson() => Navigation.NavigateTo($"/research-center/{PersonId}?start=true");
+
+    private static string FormatDate(DateOnly? date)
+    {
+        return date?.ToString("MMMM d, yyyy") ?? "Not recorded";
+    }
+
+    private sealed class EditPersonFormModel
+    {
+        [MaxLength(200)]
+        public string GivenName { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string Surname { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string Suffix { get; set; } = string.Empty;
+
+        public DateOnly? BirthDate { get; set; }
+
+        public DateOnly? DeathDate { get; set; }
+
+        public bool IsLiving { get; set; }
+
+        public Guid? PrimaryFamilyBranchId { get; set; }
+    }
+}

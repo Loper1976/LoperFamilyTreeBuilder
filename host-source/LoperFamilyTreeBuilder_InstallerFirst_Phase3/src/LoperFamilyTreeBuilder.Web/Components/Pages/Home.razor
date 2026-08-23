@@ -1,0 +1,139 @@
+@page "/"
+@rendermode InteractiveServer
+@inject DashboardQueryService DashboardQuery
+@inject NavigationManager Navigation
+
+<PageTitle>Dashboard - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Dashboard</h1>
+        <p>What is in the archive, what needs attention, and where to go next.</p>
+    </div>
+    <button class="primary-action"
+            @onclick="OpenAddPerson">
+        Add Person
+    </button>
+</div>
+
+<div class="search-card">
+    <label for="globalSearch">Global person search</label>
+    <div class="dashboard-search">
+        <input id="globalSearch"
+               @bind="_search"
+               @bind:event="oninput"
+               placeholder="Name, Legacy Number, internal ID, place, source, or keyword" />
+        <button class="primary-action" @onclick="OpenPeopleSearch">
+            Search
+        </button>
+    </div>
+</div>
+
+@if (_loading)
+{
+    <div class="page-card">Loading archive summary...</div>
+}
+else
+{
+    <div class="summary-grid">
+        @foreach (var item in SummaryItems)
+        {
+            <div class="summary-card">
+                <div class="summary-value">@item.Value</div>
+                <div class="summary-label">@item.Label</div>
+            </div>
+        }
+    </div>
+}
+
+<div class="dashboard-grid">
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Quick Actions</h2>
+        </div>
+        <div class="action-grid">
+            <a href="/people">Find a Person</a>
+            <a href="/people/add">Add Person</a>
+            <a href="/gedcom-import">Start GEDCOM Import</a>
+            <a href="/import-review">Open Import Review</a>
+            <a href="/medical">Medical Dashboard</a>
+            <a href="/reports">Reports</a>
+            <a href="/backup">Create Manual Backup</a>
+        </div>
+    </section>
+
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Work Queues</h2>
+        </div>
+        <div class="queue-list">
+            @foreach (var queue in Queues)
+            {
+                <div class="queue-row">
+                    <span>@queue</span>
+                    <strong>0</strong>
+                </div>
+            }
+        </div>
+    </section>
+</div>
+
+@code {
+    private void OpenAddPerson() => Navigation.NavigateTo("/people/add");
+
+    private DashboardSummary? _summary;
+    private bool _loading = true;
+    private string _search = string.Empty;
+
+    private IEnumerable<(string Label, string Value)> SummaryItems
+    {
+        get
+        {
+            var summary = _summary ?? new DashboardSummary(
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+
+            return
+            [
+                ("People", summary.People.ToString()),
+                ("Family Branches", summary.FamilyBranches.ToString()),
+                ("Living", summary.Living.ToString()),
+                ("Deceased", summary.Deceased.ToString()),
+                ("Photos", summary.Photos.ToString()),
+                ("Documents", summary.Documents.ToString()),
+                ("Sources", summary.Sources.ToString()),
+                ("Pending Reviews", summary.PendingReviews.ToString())
+            ];
+        }
+    }
+
+    private readonly string[] Queues =
+    [
+        "Needs research",
+        "Needs source",
+        "Needs photo",
+        "Duplicate review",
+        "GEDCOM import review",
+        "Medical review",
+        "Cemetery review",
+        "Family submissions",
+        "AI suggestions",
+        "Records with conflicts"
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _summary = await DashboardQuery.GetSummaryAsync();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenPeopleSearch()
+    {
+        Navigation.NavigateTo("/people");
+    }
+}
