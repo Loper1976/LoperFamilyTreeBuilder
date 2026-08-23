@@ -98,6 +98,8 @@ alone does not satisfy Alpha readiness.
   global import; its working tree now contains the equivalent repair.
 - Empty-root host startup and packaged-runtime startup both applied migrations
   and returned `ok` from `/health`.
-- ResearchAgent tests pass 29/29 and host tests pass 12/12.
+- ResearchAgent tests pass 29/29 and host tests pass 13/13. The host suite includes an
+  old-schema migration test proving that existing people receive both a protected
+  LOPER ID and a matching immutable audit event.
 - The installer builds cleanly and its MSI administrative image runs, but Alpha
   remains gated on the disposable clean-Windows bundle workflow passing.

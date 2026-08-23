@@ -17,8 +17,16 @@ public sealed class AddLoperId : Migration
 
         migrationBuilder.Sql(
             """
+            DECLARE @Assigned TABLE
+            (
+                [PersonId] uniqueidentifier NOT NULL,
+                [LoperId] nvarchar(255) NOT NULL
+            );
+
             INSERT INTO [PersonIdentifiers]
                 ([Id], [PersonId], [IdentifierType], [Value], [IsProtected], [CreatedUtc])
+            OUTPUT inserted.[PersonId], inserted.[Value]
+                INTO @Assigned ([PersonId], [LoperId])
             SELECT
                 NEWID(),
                 p.[Id],
@@ -38,6 +46,21 @@ public sealed class AddLoperId : Migration
                 FROM [PersonIdentifiers] i
                 WHERE i.[PersonId] = p.[Id]
                   AND i.[IdentifierType] = 5);
+
+            INSERT INTO [AuditEvents]
+                ([Id], [OccurredUtc], [Action], [EntityType], [EntityId], [Actor],
+                 [Summary], [PreviousValueJson], [NewValueJson])
+            SELECT
+                NEWID(),
+                SYSDATETIMEOFFSET(),
+                N'AssignLoperId',
+                N'Person',
+                CONVERT(nvarchar(100), a.[PersonId]),
+                N'LOPER ID Migration',
+                N'Assigned a protected LOPER ID to an existing person.',
+                NULL,
+                CONCAT(N'{"LoperId":"', a.[LoperId], N'"}')
+            FROM @Assigned a;
             """);
 
         migrationBuilder.CreateIndex(
@@ -53,6 +76,9 @@ public sealed class AddLoperId : Migration
         migrationBuilder.DropIndex(
             name: "UX_PersonIdentifiers_LoperId",
             table: "PersonIdentifiers");
+
+        migrationBuilder.Sql(
+            "DELETE FROM [AuditEvents] WHERE [Action] = N'AssignLoperId' AND [Actor] = N'LOPER ID Migration';");
 
         migrationBuilder.Sql(
             "DELETE FROM [PersonIdentifiers] WHERE [IdentifierType] = 5;");

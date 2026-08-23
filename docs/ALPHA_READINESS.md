@@ -15,7 +15,7 @@ LocalDB 17.0.4025.3, Ollama 0.32.15, and `qwen2.5:3b`.
 | Accepted tree protected | Pass | LocalDB integration test requires persisted matching approval and reviewed supporting evidence; conflicting/unverified claims are rejected; promotion writes an immutable provenance link and audit event. |
 | Backup and restore verified | Pass | Integration test creates a SQL `BACKUP DATABASE ... WITH CHECKSUM`, runs `RESTORE VERIFYONLY`, restores a temporary database, queries it, and drops the test copy before promotion completes. |
 | Installer builds | Pass | WiX 4 application MSI and Burn bundle build with zero warnings/errors. The bundle SHA-256 was `DDC18B239FA490CD1CB6A97082FC1CBAE9A692DA80CF800AE4DB56EB4A7D9D37`. |
-| Tests pass | Pass | 29/29 ResearchAgent tests and 12/12 host tests passed, including NARA parsing/privacy and protected LOPER ID behavior. |
+| Tests pass | Pass | 29/29 ResearchAgent tests and 13/13 host tests passed in the clean Windows workflow, including NARA parsing/privacy, protected LOPER ID behavior, and audited migration backfill. |
 | Clean Windows bundle install | Pass | [Disposable Windows 2025 run 32662906631](https://github.com/Loper1976/LoperFamilyTreeBuilder/actions/runs/32662906631) installed the Burn bundle on a clean runner, initialized a new database, returned HTTP 200 for health/research/settings, and uninstalled the application. Evidence artifact digest: `0fa39269f1a7373b0579ade07542060488b102597128392c909126a27fa0b291`. |
 
 ## Decision

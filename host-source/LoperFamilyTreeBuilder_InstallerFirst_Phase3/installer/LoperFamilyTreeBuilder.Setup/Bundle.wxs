@@ -3,7 +3,7 @@
 
   <Bundle Name="Loper Family Tree Builder"
           Manufacturer="Phil Loper"
-          Version="1.0.1.0"
+          Version="1.0.2.0"
           UpgradeCode="{B90A31E4-FA5B-4DDC-8802-8D07E4206C1F}">
 
     <BootstrapperApplication>
