@@ -10,6 +10,7 @@
   <ItemGroup>
     <ProjectReference Include="..\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
     <ProjectReference Include="..\LoperFamilyTreeBuilder.Infrastructure\LoperFamilyTreeBuilder.Infrastructure.csproj" />
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.ImportExport\LoperFamilyTreeBuilder.ImportExport.csproj" />
     <ProjectReference Include="..\..\..\..\research-agent\core\ResearchAgent.Core.csproj" />
   </ItemGroup>
 

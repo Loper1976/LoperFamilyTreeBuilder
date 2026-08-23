@@ -76,4 +76,39 @@ public sealed class GedcomParserTests
         Assert.Contains(document.Diagnostics, x => x.Contains("trailer", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(document.Diagnostics, x => x.Contains("missing individual", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public async Task PreviewSeparatesExactPossibleAndNewPeopleWithoutNamesInOutput()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @I1@ INDI
+            1 NAME Exact /Example/
+            1 BIRT
+            2 DATE 1 JAN 1900
+            0 @I2@ INDI
+            1 NAME Possible /Example/
+            0 @I3@ INDI
+            1 NAME New /Example/
+            0 TRLR
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+        var document = await new GedcomParser().ParseAsync(stream, new DateOnly(2026, 8, 23));
+        var accepted = new[]
+        {
+            new AcceptedPersonMatchInput(Guid.NewGuid(), "Exact", "Example", new DateOnly(1900, 1, 1)),
+            new AcceptedPersonMatchInput(Guid.NewGuid(), "Possible", "Example", null)
+        };
+
+        var preview = new GedcomDuplicateAnalyzer().CreatePreview(document, accepted);
+
+        Assert.Equal(1, preview.ExactDuplicateCount);
+        Assert.Equal(1, preview.PossibleDuplicateCount);
+        Assert.Equal(1, preview.NewPersonCount);
+        Assert.DoesNotContain(preview.Candidates, candidate =>
+            candidate.GetType().GetProperties().Any(property => property.Name.Contains("Name")));
+    }
 }

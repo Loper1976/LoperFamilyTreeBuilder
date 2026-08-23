@@ -7,6 +7,7 @@ using ResearchAgent.Core.Persistence;
 using ResearchAgent.Core.Review;
 using ResearchAgent.Core.UI;
 using ResearchAgent.Core.Research;
+using LoperFamilyTreeBuilder.ImportExport.Gedcom;
 
 namespace LoperFamilyTreeBuilder.Data;
 
@@ -52,6 +53,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IResearchCenterService, ResearchCenterService>();
         services.AddScoped<ResearchExecutor>();
         services.AddScoped<ResearchCommandService>();
+        services.AddSingleton<GedcomParser>();
+        services.AddSingleton<GedcomDuplicateAnalyzer>();
+        services.AddScoped<GedcomImportPreviewService>();
 
         return services;
     }

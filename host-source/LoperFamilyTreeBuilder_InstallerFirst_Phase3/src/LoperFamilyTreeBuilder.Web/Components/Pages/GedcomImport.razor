@@ -1,0 +1,82 @@
+@page "/gedcom-import"
+@rendermode InteractiveServer
+@inject GedcomImportPreviewService PreviewService
+
+<PageTitle>GEDCOM Import Preview - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>GEDCOM Import Preview</h1>
+        <p>Analyze people and relationships without changing the accepted family tree.</p>
+    </div>
+</div>
+
+<section class="page-card">
+    <div class="section-title">
+        <h2>Select the private GEDCOM</h2>
+        <p>The file is read in memory for preview. Nothing is imported, researched, or uploaded by this screen.</p>
+    </div>
+    <InputFile OnChange="AnalyzeAsync" accept=".ged,.gedcom" />
+    @if (_running) { <p>Analyzing GEDCOM and checking for duplicates...</p> }
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+</section>
+
+@if (_preview is not null)
+{
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Non-destructive preview</h2>
+            <p>GEDCOM @_preview.GedcomVersion · @_preview.CharacterEncoding</p>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.IndividualCount</div><div class="summary-label">People</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.FamilyCount</div><div class="summary-label">Families</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.SourceCount</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.MediaCount</div><div class="summary-label">Media records</div></div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.ExplicitlyDeceasedCount</div><div class="summary-label">Explicitly deceased</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.HistoricalByAgeCount</div><div class="summary-label">Historical by age</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.ProtectedUncertainCount</div><div class="summary-label">Protected/uncertain</div></div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.NewPersonCount</div><div class="summary-label">Proposed new people</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.PossibleDuplicateCount</div><div class="summary-label">Possible duplicates</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.ExactDuplicateCount</div><div class="summary-label">Exact duplicates</div></div>
+        </div>
+        @if (_preview.Diagnostics.Count > 0)
+        {
+            <div class="alert alert-error">
+                <strong>Import is blocked until these structural problems are resolved:</strong>
+                <ul>@foreach (var diagnostic in _preview.Diagnostics.Take(20)) { <li>@diagnostic</li> }</ul>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-success">Validation passed. The accepted tree is unchanged. Review and import controls will be enabled only after backup/audit integration is verified.</div>
+        }
+    </section>
+}
+
+@code {
+    private const long MaximumGedcomBytes = 25 * 1024 * 1024;
+    private GedcomImportPreview? _preview;
+    private bool _running;
+    private string _error = string.Empty;
+
+    private async Task AnalyzeAsync(InputFileChangeEventArgs args)
+    {
+        _running = true;
+        _error = string.Empty;
+        _preview = null;
+        try
+        {
+            if (args.File.Size > MaximumGedcomBytes)
+                throw new InvalidOperationException("GEDCOM files over 25 MB require the offline importer.");
+            await using var stream = args.File.OpenReadStream(MaximumGedcomBytes);
+            _preview = await PreviewService.PreviewAsync(stream);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+}
