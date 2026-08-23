@@ -119,7 +119,27 @@ public sealed class Person
             return AddLegacyNumber(value);
         }
 
+        if (identifierType == PersonIdentifierType.LoperId)
+        {
+            return AddLoperId(value);
+        }
+
         var identifier = PersonIdentifier.Create(Id, identifierType, value, isProtected);
+        _identifiers.Add(identifier);
+        Touch();
+        return identifier;
+    }
+
+    public PersonIdentifier AddLoperId(string value)
+    {
+        if (_identifiers.Any(identifier =>
+            identifier.IdentifierType == PersonIdentifierType.LoperId))
+        {
+            throw new InvalidOperationException(
+                "This person already has a protected LOPER ID.");
+        }
+
+        var identifier = PersonIdentifier.CreateLoperId(Id, value);
         _identifiers.Add(identifier);
         Touch();
         return identifier;

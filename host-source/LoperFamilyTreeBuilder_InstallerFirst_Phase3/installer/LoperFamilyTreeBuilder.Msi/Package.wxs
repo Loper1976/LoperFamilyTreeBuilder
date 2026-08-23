@@ -2,7 +2,7 @@
 
   <Package Name="Loper Family Tree Builder"
            Manufacturer="Phil Loper"
-           Version="1.0.0"
+           Version="1.0.1"
            UpgradeCode="{4BDBF4F0-7C82-4FA5-B0B0-6E6CA04E80E9}"
            Scope="perMachine">
 

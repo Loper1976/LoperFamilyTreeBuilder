@@ -5,6 +5,7 @@
 @inject IHostPersonReader People
 @inject ResearchCommandService Commands
 @inject IResearchStore Store
+@inject NaraCatalogSearchProvider Nara
 
 <PageTitle>Research Center - Loper Family Tree Builder</PageTitle>
 
@@ -13,6 +14,34 @@
 @if (!PersonId.HasValue)
 {
     <section class="page-card"><p>Open a person profile and choose <strong>Research This Person</strong>.</p></section>
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Search the National Archives</h2>
+            <p>Use only names and details for deceased people or other public historical research.</p>
+        </div>
+        <div class="filter-actions">
+            <input @bind="_naraQuery" @bind:event="oninput" placeholder="Name, military unit, place, record type, or keyword" />
+            <button class="primary-action" disabled="@_running" @onclick="SearchNaraAsync">@(_running ? "Searching..." : "Search NARA")</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+    </section>
+    @if (_candidates.Count > 0)
+    {
+        <section class="page-card">
+            <div class="section-title"><h2>National Archives candidates</h2><p>Candidates are not evidence until reviewed and cited.</p></div>
+            @foreach (var candidate in _candidates)
+            {
+                <div class="queue-row">
+                    <div>
+                        <a href="@candidate.Url" target="_blank" rel="noopener noreferrer"><strong>@candidate.Title</strong></a>
+                        <div class="muted">@candidate.Repository · @candidate.RecordType</div>
+                        @if (!string.IsNullOrWhiteSpace(candidate.Summary)) { <div>@candidate.Summary</div> }
+                    </div>
+                    <strong>@candidate.MatchHint.ToString("0")</strong>
+                </div>
+            }
+        </section>
+    }
 }
 else if (_loading)
 {
@@ -36,6 +65,37 @@ else if (_summary is not null)
         @if (!string.IsNullOrWhiteSpace(_status)) { <div class="alert alert-success">@_status</div> }
     </section>
 
+    @if (_candidates.Count > 0)
+    {
+        <section class="page-card">
+            <div class="section-title">
+                <h2>National Archives candidates</h2>
+                <p>Candidates are not evidence until reviewed and cited.</p>
+            </div>
+            @foreach (var candidate in _candidates)
+            {
+                <div class="queue-row">
+                    <div>
+                        @if (candidate.Url is not null)
+                        {
+                            <a href="@candidate.Url" target="_blank" rel="noopener noreferrer"><strong>@candidate.Title</strong></a>
+                        }
+                        else
+                        {
+                            <strong>@candidate.Title</strong>
+                        }
+                        <div class="muted">@candidate.Repository · @candidate.RecordType</div>
+                        @if (!string.IsNullOrWhiteSpace(candidate.Summary))
+                        {
+                            <div>@candidate.Summary</div>
+                        }
+                    </div>
+                    <strong>@candidate.MatchHint.ToString("0")</strong>
+                </div>
+            }
+        </section>
+    }
+
     <section class="page-card"><div class="section-title"><h2>Research queue</h2></div>
         @if (_summary.Tasks.Count == 0) { <p class="muted">No open research tasks.</p> }
         else { @foreach (var task in _summary.Tasks) { <div class="queue-row"><span>@task.Question</span><strong>@task.PriorityScore.ToString("0")</strong></div> } }
@@ -50,6 +110,34 @@ else if (_summary is not null)
     private bool _running;
     private string _error = string.Empty;
     private string _status = string.Empty;
+    private string _naraQuery = string.Empty;
+    private IReadOnlyList<SourceSearchResult> _candidates = [];
+
+    private async Task SearchNaraAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_naraQuery)) return;
+        _running = true;
+        _error = string.Empty;
+        try
+        {
+            _candidates = await Nara.SearchAsync(new SourceSearchQuery(
+                Guid.Empty,
+                _naraQuery.Trim(),
+                "National Archives Catalog",
+                null,
+                null,
+                null,
+                PrivacyClass.PublicHistorical));
+        }
+        catch (Exception ex)
+        {
+            _error = $"National Archives search is temporarily unavailable: {ex.Message}";
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -76,7 +164,15 @@ else if (_summary is not null)
             var privacy = person.DeathDate.HasValue ? PrivacyClass.PublicHistorical : PrivacyClass.LivingPersonSensitive;
             var result = await Commands.ResearchThisPersonAsync(new StartResearchRequest(profile, privacy));
             foreach (var task in result.Plan.Tasks) await Store.SaveResearchTaskAsync(task);
-            _status = $"Created {result.Plan.Tasks.Count} proposal-first research tasks. No accepted-tree facts were changed.";
+            _candidates = result.Run.Executions
+                .SelectMany(execution => execution.Results)
+                .Where(candidate => candidate.Provider == "National Archives Catalog")
+                .GroupBy(candidate => candidate.Url?.ToString() ?? candidate.Title)
+                .Select(group => group.First())
+                .OrderByDescending(candidate => candidate.MatchHint)
+                .Take(25)
+                .ToArray();
+            _status = $"Created {result.Plan.Tasks.Count} proposal-first research tasks and found {_candidates.Count} National Archives candidates. No accepted-tree facts were changed.";
             await RefreshAsync();
         }
         catch (Exception ex) { _error = ex.Message; }

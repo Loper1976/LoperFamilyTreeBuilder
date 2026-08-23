@@ -91,6 +91,11 @@ public sealed class PeopleQueryService(
                 person.IsLiving,
                 person.Identifiers
                     .Where(identifier =>
+                        identifier.IdentifierType == PersonIdentifierType.LoperId)
+                    .Select(identifier => identifier.Value)
+                    .FirstOrDefault(),
+                person.Identifiers
+                    .Where(identifier =>
                         identifier.IdentifierType ==
                             PersonIdentifierType.LegacyNumber)
                     .Select(identifier => identifier.Value)

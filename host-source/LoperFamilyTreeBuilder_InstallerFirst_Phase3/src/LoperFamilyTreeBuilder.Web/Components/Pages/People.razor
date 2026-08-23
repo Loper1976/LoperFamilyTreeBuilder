@@ -24,7 +24,7 @@
             <label>Search</label>
             <input @bind="_request.SearchText"
                    @bind:event="oninput"
-                   placeholder="Name, Legacy Number, or keyword" />
+                   placeholder="Name, LOPER ID, Legacy Number, or keyword" />
         </div>
 
         <div>
@@ -109,6 +109,7 @@ else
                 <thead>
                     <tr>
                         <th>Name</th>
+                        <th>LOPER ID</th>
                         <th>Legacy Number</th>
                         <th>Branch</th>
                         <th>Born</th>
@@ -124,6 +125,12 @@ else
                                 <a href="@($"/people/{person.Id}")">
                                     @person.DisplayName
                                 </a>
+                            </td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(person.LoperId))
+                                {
+                                    <span class="legacy-number">@person.LoperId</span>
+                                }
                             </td>
                             <td>
                                 @if (!string.IsNullOrEmpty(person.LegacyNumber))

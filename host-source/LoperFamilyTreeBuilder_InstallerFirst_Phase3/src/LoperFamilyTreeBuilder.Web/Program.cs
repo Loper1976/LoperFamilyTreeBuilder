@@ -2,6 +2,7 @@ using LoperFamilyTreeBuilder.Data;
 using LoperFamilyTreeBuilder.Infrastructure.Configuration;
 using LoperFamilyTreeBuilder.Web.Components;
 using LoperFamilyTreeBuilder.Web.Services;
+using ResearchAgent.Core.Research;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +14,9 @@ builder.Services.AddSingleton<ApplicationPaths>();
 builder.Services.AddSingleton<ArchiveConfigurationStore>();
 builder.Services.AddSingleton<AiConfigurationStore>();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<NaraCatalogSearchProvider>();
+builder.Services.AddScoped<ISourceSearchProvider>(provider =>
+    provider.GetRequiredService<NaraCatalogSearchProvider>());
 
 builder.Services.AddFamilyTreeData();
 

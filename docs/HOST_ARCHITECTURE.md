@@ -50,6 +50,19 @@ for their identifier type, and cannot be replaced through normal person editing.
 The 1.0.17 update includes regression tests that ensure edit requests do not
 contain a Legacy Number field and audit snapshots retain the exact value.
 
+Every person also receives a protected sequential LOPER ID in the format
+`LOPER-000001`. A SQL Server sequence prevents reuse; a filtered unique index
+enforces uniqueness; the migration deterministically backfills existing people.
+LOPER IDs are searchable and displayed separately from historical Legacy
+Numbers and internal GUIDs.
+
+## National Archives search
+
+`NaraCatalogSearchProvider` connects Research Center searches to the public
+read-only Catalog route used by NARA's official web application. It supports
+only public-historical queries, returns citation-only candidates, and cannot
+write accepted-tree facts. See `docs/NATIONAL_ARCHIVES_SEARCH.md`.
+
 ## Startup and navigation
 
 The Windows Forms launcher validates LocalDB and starts the ASP.NET Core host.
@@ -85,6 +98,6 @@ alone does not satisfy Alpha readiness.
   global import; its working tree now contains the equivalent repair.
 - Empty-root host startup and packaged-runtime startup both applied migrations
   and returned `ok` from `/health`.
-- ResearchAgent tests pass 27/27 and host tests pass 10/10.
+- ResearchAgent tests pass 29/29 and host tests pass 12/12.
 - The installer builds cleanly and its MSI administrative image runs, but Alpha
   remains gated on the disposable clean-Windows bundle workflow passing.

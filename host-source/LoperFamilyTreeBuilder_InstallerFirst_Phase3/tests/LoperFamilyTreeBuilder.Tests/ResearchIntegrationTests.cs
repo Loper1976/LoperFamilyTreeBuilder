@@ -49,6 +49,11 @@ public sealed class ResearchIntegrationTests
 
             var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<FamilyTreeDbContext>>();
             await using var db = await factory.CreateDbContextAsync();
+            Assert.True(await db.PersonIdentifiers.AnyAsync(x =>
+                x.PersonId == personId &&
+                x.IdentifierType == LoperFamilyTreeBuilder.Core.Entities.PersonIdentifierType.LoperId &&
+                x.Value.StartsWith("LOPER-") &&
+                x.IsProtected));
             Assert.True(await db.AcceptedFacts.AnyAsync(x => x.Id == factId && x.ResearchClaimId == claim.Id));
             Assert.True(await db.AuditEvents.AnyAsync(x => x.Action == "PromoteResearchClaim" && x.EntityId == factId.ToString()));
             var backup = Directory.GetFiles(Path.Combine(validationRoot, "Backups"), "*.bak")

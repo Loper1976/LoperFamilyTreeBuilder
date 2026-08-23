@@ -29,6 +29,11 @@ public sealed class PersonProfileQueryService(
                 item.IsLiving,
                 item.CreatedUtc,
                 item.ModifiedUtc,
+                LoperId = item.Identifiers
+                    .Where(identifier =>
+                        identifier.IdentifierType == PersonIdentifierType.LoperId)
+                    .Select(identifier => identifier.Value)
+                    .FirstOrDefault(),
                 LegacyNumber = item.Identifiers
                     .Where(identifier =>
                         identifier.IdentifierType ==
@@ -152,6 +157,7 @@ public sealed class PersonProfileQueryService(
             person.BirthDate,
             person.DeathDate,
             person.IsLiving,
+            person.LoperId,
             person.LegacyNumber,
             person.CreatedUtc,
             person.ModifiedUtc,

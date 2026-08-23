@@ -32,7 +32,8 @@ public sealed class ResearchExecutor(IEnumerable<ISourceSearchProvider> provider
             foreach (var provider in supported)
             {
                 try { results.AddRange(await provider.SearchAsync(query, cancellationToken)); }
-                catch (HttpRequestException ex) { executions.Add(new(task, [], "ProviderError", $"{provider.Name}: {ex.Message}")); }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+                catch (Exception ex) { executions.Add(new(task, [], "ProviderError", $"{provider.Name}: {ex.Message}")); }
             }
             var ordered = results.OrderByDescending(r => r.MatchHint).ToArray();
             executions.Add(new(task, ordered, ordered.Length == 0 ? "NoResults" : "CandidatesFound"));

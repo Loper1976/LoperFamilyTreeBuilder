@@ -40,6 +40,14 @@ else
             </div>
 
             <div class="person-hero-actions">
+                @if (!string.IsNullOrEmpty(_profile.LoperId))
+                {
+                    <div class="legacy-lock-card" title="Protected system identifier">
+                        <span class="legacy-lock-label">LOPER ID</span>
+                        <strong>@_profile.LoperId</strong>
+                        <span class="legacy-lock-note">Protected • read only</span>
+                    </div>
+                }
                 @if (!string.IsNullOrEmpty(_profile.LegacyNumber))
                 {
                     <div class="legacy-lock-card" title="Protected historical identifier">

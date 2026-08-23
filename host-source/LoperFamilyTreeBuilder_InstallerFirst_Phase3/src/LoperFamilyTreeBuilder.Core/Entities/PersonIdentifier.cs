@@ -56,6 +56,18 @@ public sealed class PersonIdentifier
             isProtected: true);
     }
 
+    public static PersonIdentifier CreateLoperId(Guid personId, string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            throw new ArgumentException("A LOPER ID cannot be empty.", nameof(value));
+
+        return new PersonIdentifier(
+            personId,
+            PersonIdentifierType.LoperId,
+            value,
+            isProtected: true);
+    }
+
     public static PersonIdentifier Create(
         Guid personId,
         PersonIdentifierType identifierType,
@@ -65,6 +77,11 @@ public sealed class PersonIdentifier
         if (identifierType == PersonIdentifierType.LegacyNumber)
         {
             return CreateLegacyNumber(personId, value);
+        }
+
+        if (identifierType == PersonIdentifierType.LoperId)
+        {
+            return CreateLoperId(personId, value);
         }
 
         return new PersonIdentifier(personId, identifierType, value, isProtected);

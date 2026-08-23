@@ -1,6 +1,8 @@
 using System.Text.Json;
+using System.Data;
 using LoperFamilyTreeBuilder.Core.Entities;
 using LoperFamilyTreeBuilder.Core.Models;
+using LoperFamilyTreeBuilder.Core.Policies;
 using Microsoft.EntityFrameworkCore;
 
 namespace LoperFamilyTreeBuilder.Data.Services;
@@ -29,6 +31,12 @@ public sealed class PersonCommandService(
             await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var person = new Person(givenName, surname);
+
+        var loperIdSequence = await GetNextLoperIdSequenceAsync(
+            db,
+            cancellationToken);
+        var loperId = LoperIdPolicy.Format(loperIdSequence);
+        person.AddLoperId(loperId);
 
         person.UpdateName(
             givenName,
@@ -94,6 +102,7 @@ public sealed class PersonCommandService(
             person.BirthDate,
             person.DeathDate,
             person.IsLiving,
+            LoperId = loperId,
             LegacyNumber = request.LegacyNumber,
             request.FamilyBranchId
         });
@@ -110,6 +119,29 @@ public sealed class PersonCommandService(
         await db.SaveChangesAsync(cancellationToken);
 
         return person.Id;
+    }
+
+    private static async Task<long> GetNextLoperIdSequenceAsync(
+        FamilyTreeDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var connection = db.Database.GetDbConnection();
+        var openedHere = connection.State != ConnectionState.Open;
+        if (openedHere)
+            await connection.OpenAsync(cancellationToken);
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT NEXT VALUE FOR [LoperIdSequence]";
+            var value = await command.ExecuteScalarAsync(cancellationToken);
+            return Convert.ToInt64(value);
+        }
+        finally
+        {
+            if (openedHere)
+                await connection.CloseAsync();
+        }
     }
 
     public async Task UpdateAsync(

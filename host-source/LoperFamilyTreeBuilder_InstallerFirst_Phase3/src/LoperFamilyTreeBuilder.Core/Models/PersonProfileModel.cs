@@ -9,6 +9,7 @@ public sealed record PersonProfileModel(
     DateOnly? BirthDate,
     DateOnly? DeathDate,
     bool IsLiving,
+    string? LoperId,
     string? LegacyNumber,
     DateTimeOffset CreatedUtc,
     DateTimeOffset ModifiedUtc,

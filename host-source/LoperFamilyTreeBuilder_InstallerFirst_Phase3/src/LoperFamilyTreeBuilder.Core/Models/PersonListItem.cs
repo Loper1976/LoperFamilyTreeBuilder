@@ -9,6 +9,7 @@ public sealed record PersonListItem(
     DateOnly? BirthDate,
     DateOnly? DeathDate,
     bool IsLiving,
+    string? LoperId,
     string? LegacyNumber,
     string? PrimaryBranchName)
 {
