@@ -44,6 +44,10 @@
             <div class="summary-card"><div class="summary-value">@_preview.PossibleDuplicateCount</div><div class="summary-label">Possible duplicates</div></div>
             <div class="summary-card"><div class="summary-value">@_preview.ExactDuplicateCount</div><div class="summary-label">Exact duplicates</div></div>
         </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.VerificationErrorCount</div><div class="summary-label">Timeline/relationship errors</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.VerificationWarningCount</div><div class="summary-label">Verification warnings</div></div>
+        </div>
         @if (_preview.Diagnostics.Count > 0)
         {
             <div class="alert alert-error">

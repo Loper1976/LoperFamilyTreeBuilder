@@ -55,6 +55,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ResearchCommandService>();
         services.AddSingleton<GedcomParser>();
         services.AddSingleton<GedcomDuplicateAnalyzer>();
+        services.AddSingleton<GedcomConsistencyAuditor>();
         services.AddScoped<GedcomImportPreviewService>();
 
         return services;

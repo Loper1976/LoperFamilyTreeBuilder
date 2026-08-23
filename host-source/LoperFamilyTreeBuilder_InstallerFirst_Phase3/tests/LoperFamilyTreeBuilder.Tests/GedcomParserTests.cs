@@ -111,4 +111,39 @@ public sealed class GedcomParserTests
         Assert.DoesNotContain(preview.Candidates, candidate =>
             candidate.GetType().GetProperties().Any(property => property.Name.Contains("Name")));
     }
+
+    [Fact]
+    public async Task ConsistencyAuditFindsImpossibleTimelinesWithoutChangingRecords()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @P1@ INDI
+            1 NAME Parent /Example/
+            1 BIRT
+            2 DATE 1900
+            1 DEAT
+            2 DATE 1910
+            0 @C1@ INDI
+            1 NAME Child /Example/
+            1 BIRT
+            2 DATE 1920
+            1 DEAT
+            2 DATE 1919
+            0 @F1@ FAM
+            1 HUSB @P1@
+            1 CHIL @C1@
+            0 TRLR
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+        var document = await new GedcomParser().ParseAsync(stream);
+
+        var report = new GedcomConsistencyAuditor().Audit(document);
+
+        Assert.Contains(report.Issues, x => x.Code == "DEATH_BEFORE_BIRTH");
+        Assert.Contains(report.Issues, x => x.Code == "CHILD_AFTER_PARENT_DEATH");
+        Assert.Equal(2, document.Individuals.Count);
+    }
 }

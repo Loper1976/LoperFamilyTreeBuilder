@@ -6,7 +6,8 @@ namespace LoperFamilyTreeBuilder.Data.Services;
 public sealed class GedcomImportPreviewService(
     IDbContextFactory<FamilyTreeDbContext> contextFactory,
     GedcomParser parser,
-    GedcomDuplicateAnalyzer analyzer)
+    GedcomDuplicateAnalyzer analyzer,
+    GedcomConsistencyAuditor auditor)
 {
     public async Task<GedcomImportPreview> PreviewAsync(
         Stream gedcom,
@@ -21,6 +22,6 @@ public sealed class GedcomImportPreviewService(
                 person.Surname,
                 person.BirthDate))
             .ToArrayAsync(cancellationToken);
-        return analyzer.CreatePreview(document, acceptedPeople);
+        return analyzer.CreatePreview(document, acceptedPeople, auditor.Audit(document));
     }
 }

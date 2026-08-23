@@ -32,6 +32,8 @@ public sealed record GedcomImportPreview(
     int NewPersonCount,
     int PossibleDuplicateCount,
     int ExactDuplicateCount,
+    int VerificationErrorCount,
+    int VerificationWarningCount,
     IReadOnlyList<GedcomImportCandidate> Candidates,
     IReadOnlyList<string> Diagnostics)
 {
@@ -42,7 +44,8 @@ public sealed class GedcomDuplicateAnalyzer
 {
     public GedcomImportPreview CreatePreview(
         GedcomDocument document,
-        IReadOnlyCollection<AcceptedPersonMatchInput> acceptedPeople)
+        IReadOnlyCollection<AcceptedPersonMatchInput> acceptedPeople,
+        GedcomVerificationReport? verification = null)
     {
         var candidates = document.Individuals.Select(person =>
         {
@@ -80,6 +83,8 @@ public sealed class GedcomDuplicateAnalyzer
             candidates.Count(x => x.Disposition == GedcomImportDisposition.NewPerson),
             candidates.Count(x => x.Disposition == GedcomImportDisposition.PossibleDuplicate),
             candidates.Count(x => x.Disposition == GedcomImportDisposition.ExactDuplicate),
+            verification?.ErrorCount ?? 0,
+            verification?.WarningCount ?? 0,
             candidates,
             document.Diagnostics);
     }
