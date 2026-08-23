@@ -94,7 +94,9 @@ public sealed class GedcomReviewedImportService(
                 person.UpdateName(source.GivenName, string.Empty, source.Surname, string.Empty);
                 person.SetBirthDate(source.BirthDate?.ExactDate);
                 person.SetDeathDate(source.DeathDate?.ExactDate);
-                if (!source.HasDeathRecord)
+                if (source.HasDeathRecord)
+                    person.SetLivingStatus(false);
+                else
                     person.SetLivingStatus(source.Privacy == GedcomPrivacyClassification.ProtectedUncertain);
 
                 var sequence = await GetNextLoperIdSequenceAsync(db, cancellationToken);
