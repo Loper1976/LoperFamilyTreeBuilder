@@ -17,6 +17,9 @@ builder.Services.AddHttpClient();
 builder.Services.AddHttpClient<NaraCatalogSearchProvider>();
 builder.Services.AddScoped<ISourceSearchProvider>(provider =>
     provider.GetRequiredService<NaraCatalogSearchProvider>());
+builder.Services.AddHttpClient<LibraryOfCongressSearchProvider>();
+builder.Services.AddScoped<ISourceSearchProvider>(provider =>
+    provider.GetRequiredService<LibraryOfCongressSearchProvider>());
 
 builder.Services.AddFamilyTreeData();
 

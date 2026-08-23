@@ -56,12 +56,18 @@ enforces uniqueness; the migration deterministically backfills existing people.
 LOPER IDs are searchable and displayed separately from historical Legacy
 Numbers and internal GUIDs.
 
-## National Archives search
+## Public archive and library search
 
 `NaraCatalogSearchProvider` connects Research Center searches to the public
 read-only Catalog route used by NARA's official web application. It supports
 only public-historical queries, returns citation-only candidates, and cannot
 write accepted-tree facts. See `docs/NATIONAL_ARCHIVES_SEARCH.md`.
+
+`LibraryOfCongressSearchProvider` follows the same boundary using the official
+`loc.gov` JSON API. NYPL, ResearchGuides.net immigration, and AccessGenealogy
+are exposed as clearly labeled guided links because they do not offer a current
+supported public search API suitable for the host. See
+`docs/PUBLIC_RESEARCH_PROVIDERS.md`.
 
 ## Startup and navigation
 
@@ -98,7 +104,7 @@ alone does not satisfy Alpha readiness.
   global import; its working tree now contains the equivalent repair.
 - Empty-root host startup and packaged-runtime startup both applied migrations
   and returned `ok` from `/health`.
-- ResearchAgent tests pass 29/29 and host tests pass 13/13. The host suite includes an
+- ResearchAgent tests pass 31/31 and host tests pass 13/13. The host suite includes an
   old-schema migration test proving that existing people receive both a protected
   LOPER ID and a matching immutable audit event.
 - The installer builds cleanly and its MSI administrative image runs, but Alpha
