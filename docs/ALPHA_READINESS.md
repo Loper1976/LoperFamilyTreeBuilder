@@ -14,9 +14,10 @@ LocalDB 17.0.4025.3, Ollama 0.32.15, and `qwen2.5:3b`.
 | Adversarial review works | Pass in automated core tests | Researcher/skeptic routing and hallucination-penalty tests pass; AI remains zero-weight analysis. |
 | Accepted tree protected | Pass | LocalDB integration test requires persisted matching approval and reviewed supporting evidence; conflicting/unverified claims are rejected; promotion writes an immutable provenance link and audit event. |
 | Backup and restore verified | Pass | Integration test creates a SQL `BACKUP DATABASE ... WITH CHECKSUM`, runs `RESTORE VERIFYONLY`, restores a temporary database, queries it, and drops the test copy before promotion completes. |
-| Installer builds | Pass | WiX 4 application MSI and Burn bundle build with zero warnings/errors. The bundle SHA-256 was `DDC18B239FA490CD1CB6A97082FC1CBAE9A692DA80CF800AE4DB56EB4A7D9D37`. |
+| Installer builds | Pass | WiX 4 application MSI and Burn bundle build with zero warnings/errors. The 1.0.2 bundle SHA-256 is `7EFB82A3A485E6BF23974B310D8525A1DD851199652A7776018DE215DE2554DD`. |
 | Tests pass | Pass | 29/29 ResearchAgent tests and 13/13 host tests passed in the clean Windows workflow, including NARA parsing/privacy, protected LOPER ID behavior, and audited migration backfill. |
-| Clean Windows bundle install | Pass | [Disposable Windows 2025 run 32662906631](https://github.com/Loper1976/LoperFamilyTreeBuilder/actions/runs/32662906631) installed the Burn bundle on a clean runner, initialized a new database, returned HTTP 200 for health/research/settings, and uninstalled the application. Evidence artifact digest: `0fa39269f1a7373b0579ade07542060488b102597128392c909126a27fa0b291`. |
+| Clean Windows bundle install | Pass | [Disposable Windows 2025 run 32665814740](https://github.com/Loper1976/LoperFamilyTreeBuilder/actions/runs/32665814740) installed the 1.0.2 Burn bundle from commit `c8481a1`, initialized a new database, returned HTTP 200 for health/research/settings, and uninstalled the application. Evidence artifact digest: `957492d80012822197939323828199476d81638bc10e16fa9382952bd2741b45`. |
+| Existing-data upgrade | Pass | A checksum-verified backup was created before upgrading the Windows validation machine from 1.0.1 to 1.0.2. First launch preserved the one existing person, assigned protected `LOPER-000001`, wrote one `AssignLoperId` migration audit event, served all main pages, and returned live NARA Catalog candidates. |
 
 ## Decision
 
