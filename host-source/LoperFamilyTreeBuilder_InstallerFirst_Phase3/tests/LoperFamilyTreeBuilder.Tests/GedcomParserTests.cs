@@ -6,6 +6,32 @@ namespace LoperFamilyTreeBuilder.Tests;
 public sealed class GedcomParserTests
 {
     [Fact]
+    public async Task ParsesBurialDateAndPlaceWithoutTreatingItAsGraveCoordinates()
+    {
+        const string text = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @I1@ INDI
+            1 NAME Ada /Example/
+            1 DEAT
+            2 DATE 1 JAN 1900
+            1 BURI
+            2 DATE 3 JAN 1900
+            2 PLAC Example Cemetery, Example County, Texas
+            0 TRLR
+            """;
+
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
+        var document = await new GedcomParser().ParseAsync(stream, new DateOnly(2026, 1, 1));
+
+        var person = Assert.Single(document.Individuals);
+        Assert.Equal("3 JAN 1900", person.BurialDate?.OriginalText);
+        Assert.Equal("Example Cemetery, Example County, Texas", person.BurialPlace);
+    }
+
+    [Fact]
     public async Task ParsesPeopleFamiliesAndPrivacyWithoutPromotingAnything()
     {
         const string fixture = """

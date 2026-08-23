@@ -85,6 +85,7 @@ public sealed class GedcomParser
 
         var birth = ParseEvent(record.Lines, "BIRT");
         var death = ParseEvent(record.Lines, "DEAT");
+        var burial = ParseEvent(record.Lines, "BURI");
         var hasDeath = death.MarkerPresent;
         var cutoffYear = evaluationDate.Year - 110;
         var privacy = hasDeath
@@ -105,7 +106,9 @@ public sealed class GedcomParser
             hasDeath,
             privacy,
             record.Lines.Where(x => x.Level == 1 && x.Tag == "FAMC").Select(x => x.Value).Where(x => x is not null).Cast<string>().ToArray(),
-            record.Lines.Where(x => x.Level == 1 && x.Tag == "FAMS").Select(x => x.Value).Where(x => x is not null).Cast<string>().ToArray());
+            record.Lines.Where(x => x.Level == 1 && x.Tag == "FAMS").Select(x => x.Value).Where(x => x is not null).Cast<string>().ToArray(),
+            burial.Date,
+            burial.Place);
     }
 
     private static GedcomFamily ParseFamily(GedcomRecord record)

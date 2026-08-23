@@ -71,6 +71,11 @@ static ResearchQueueItem CreateItem(GedcomIndividual person, bool hasFamilyLinks
     else if (string.IsNullOrWhiteSpace(person.BirthPlace)) { questions.Add("Find and verify birth place."); score += 12; }
     if (!person.HasDeathRecord) { questions.Add("Find and verify death and burial evidence."); score += 22; }
     else if (string.IsNullOrWhiteSpace(person.DeathPlace)) { questions.Add("Find and verify death place and burial."); score += 12; }
+    if (!string.IsNullOrWhiteSpace(person.BurialPlace))
+    {
+        questions.Add("Resolve the named cemetery; record sourced cemetery GPS coordinates and a map, and record an individual grave coordinate only when independently verified.");
+        score += 10;
+    }
     if (hasFamilyLinks) { questions.Add("Verify parent, spouse, and child relationships with independent records."); score += 8; }
     questions.Add("Search census, vital, military, immigration, land, probate, newspaper, and archival collections as applicable.");
 
@@ -86,6 +91,8 @@ static ResearchQueueItem CreateItem(GedcomIndividual person, bool hasFamilyLinks
         BirthPlace: person.BirthPlace,
         Death: person.DeathDate?.OriginalText,
         DeathPlace: person.DeathPlace,
+        Burial: person.BurialDate?.OriginalText,
+        BurialPlace: person.BurialPlace,
         HasFamilyLinks: hasFamilyLinks,
         Questions: questions);
 }
@@ -97,4 +104,5 @@ internal sealed record QueueSource(string FileName, string Sha256, string Gedcom
 internal sealed record ResearchQueueItem(
     string ResearchItemId, string ExternalPersonId, string GivenName, string Surname,
     string PrivacyClass, int PriorityScore, string Status, string? Birth, string? BirthPlace,
-    string? Death, string? DeathPlace, bool HasFamilyLinks, IReadOnlyList<string> Questions);
+    string? Death, string? DeathPlace, string? Burial, string? BurialPlace,
+    bool HasFamilyLinks, IReadOnlyList<string> Questions);

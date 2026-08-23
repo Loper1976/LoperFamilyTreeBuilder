@@ -21,7 +21,9 @@ public sealed record GedcomIndividual(
     bool HasDeathRecord,
     GedcomPrivacyClassification Privacy,
     IReadOnlyList<string> FamilyAsChildIds,
-    IReadOnlyList<string> FamilyAsSpouseIds);
+    IReadOnlyList<string> FamilyAsSpouseIds,
+    GedcomDate? BurialDate = null,
+    string? BurialPlace = null);
 
 public sealed record GedcomFamily(
     string ExternalId,
