@@ -78,7 +78,14 @@ try {
     $webProcess = [System.Diagnostics.Process]::Start($startInfo)
 
     $health = Wait-ForEndpoint "$baseUri/health"
-    if ($health.StatusCode -ne 200 -or $health.Content.Trim() -ne 'ok') {
+    $healthStatus = $null
+    try {
+        $healthStatus = ($health.Content | ConvertFrom-Json).status
+    }
+    catch {
+        $healthStatus = $health.Content.Trim()
+    }
+    if ($health.StatusCode -ne 200 -or $healthStatus -ne 'ok') {
         throw "Unexpected health response: HTTP $($health.StatusCode), '$($health.Content)'"
     }
 
