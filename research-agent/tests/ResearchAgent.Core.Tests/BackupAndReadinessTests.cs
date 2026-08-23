@@ -25,9 +25,19 @@ public sealed class BackupAndReadinessTests : IDisposable
     [Fact]
     public void AlphaGateRefusesPrematureInstallReadiness()
     {
-        var result = AlphaReadiness.Evaluate(new(false, false, false, false, true, true, true, true, false, false, true));
+        var result = AlphaReadiness.Evaluate(new(false, false, false, false, true, true, true, true, false, false, false, true));
         Assert.False(result.Ready);
         Assert.Contains("Installer build validation", result.Missing);
+        Assert.Contains("Clean Windows bundle installation validation", result.Missing);
+    }
+
+    [Fact]
+    public void AlphaGatePassesWhenEveryDemonstratedFlagIsTrue()
+    {
+        var result = AlphaReadiness.Evaluate(new(true, true, true, true, true, true, true, true, true, true, true, true));
+
+        Assert.True(result.Ready);
+        Assert.Empty(result.Missing);
     }
 
     public void Dispose()

@@ -15,12 +15,12 @@ LocalDB 17.0.4025.3, Ollama 0.32.15, and `qwen2.5:3b`.
 | Accepted tree protected | Pass | LocalDB integration test requires persisted matching approval and reviewed supporting evidence; conflicting/unverified claims are rejected; promotion writes an immutable provenance link and audit event. |
 | Backup and restore verified | Pass | Integration test creates a SQL `BACKUP DATABASE ... WITH CHECKSUM`, runs `RESTORE VERIFYONLY`, restores a temporary database, queries it, and drops the test copy before promotion completes. |
 | Installer builds | Pass | WiX 4 application MSI and Burn bundle build with zero warnings/errors. The bundle SHA-256 was `DDC18B239FA490CD1CB6A97082FC1CBAE9A692DA80CF800AE4DB56EB4A7D9D37`. |
-| Tests pass | Pass | 26/26 ResearchAgent tests and 10/10 host tests passed. |
-| Clean Windows bundle install | **Not yet proven** | MSI administrative extraction succeeded and its packaged web executable initialized a clean database and served health/research/settings. The repository now includes a disposable Windows-runner check for bundle install, first database creation, health/research/settings, and uninstall. This gate remains open until that workflow passes. |
+| Tests pass | Pass | 27/27 ResearchAgent tests and 10/10 host tests passed. |
+| Clean Windows bundle install | Pass | [Disposable Windows 2025 run 32662906631](https://github.com/Loper1976/LoperFamilyTreeBuilder/actions/runs/32662906631) installed the Burn bundle on a clean runner, initialized a new database, returned HTTP 200 for health/research/settings, and uninstalled the application. Evidence artifact digest: `0fa39269f1a7373b0579ade07542060488b102597128392c909126a27fa0b291`. |
 
 ## Decision
 
-Do not recommend Alpha installation yet. The explicit integration plan requires a
-clean-machine bundle installation test. Administrative extraction and packaged
-runtime startup materially reduce risk but do not prove prerequisite chaining,
-elevation, installed-file ACLs, uninstall, and first launch on a clean OS.
+Every `AlphaReadinessInput` flag now has demonstrated evidence, including the
+explicit clean-machine bundle gate. Alpha is ready for a controlled test
+installation. It is not a production release; use a fresh backup and retain the
+prior installer before testing with private genealogy data.

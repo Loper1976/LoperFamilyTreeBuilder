@@ -11,6 +11,7 @@ public sealed record AlphaReadinessInput(
     bool AcceptedTreeProtected,
     bool BackupRestoreVerified,
     bool InstallerBuilds,
+    bool CleanWindowsBundleInstall,
     bool TestsPass);
 
 public sealed record AlphaReadinessResult(bool Ready, IReadOnlyList<string> Missing);
@@ -30,6 +31,7 @@ public static class AlphaReadiness
         if (!x.AcceptedTreeProtected) missing.Add("Accepted-tree protection validation");
         if (!x.BackupRestoreVerified) missing.Add("Backup and restore verification");
         if (!x.InstallerBuilds) missing.Add("Installer build validation");
+        if (!x.CleanWindowsBundleInstall) missing.Add("Clean Windows bundle installation validation");
         if (!x.TestsPass) missing.Add("Passing automated test suite");
         return new(missing.Count == 0, missing);
     }

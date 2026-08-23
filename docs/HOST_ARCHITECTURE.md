@@ -85,6 +85,6 @@ alone does not satisfy Alpha readiness.
   global import; its working tree now contains the equivalent repair.
 - Empty-root host startup and packaged-runtime startup both applied migrations
   and returned `ok` from `/health`.
-- ResearchAgent tests pass 26/26 and host tests pass 10/10.
+- ResearchAgent tests pass 27/27 and host tests pass 10/10.
 - The installer builds cleanly and its MSI administrative image runs, but Alpha
   remains gated on the disposable clean-Windows bundle workflow passing.
