@@ -18,6 +18,7 @@
     <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
     <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.Infrastructure\LoperFamilyTreeBuilder.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.Data\LoperFamilyTreeBuilder.Data.csproj" />
+    <ProjectReference Include="..\..\src\LoperFamilyTreeBuilder.ImportExport\LoperFamilyTreeBuilder.ImportExport.csproj" />
     <ProjectReference Include="..\..\..\..\research-agent\core\ResearchAgent.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -6,4 +6,8 @@
     <AssemblyName>LoperFamilyTreeBuilder.ImportExport</AssemblyName>
     <RootNamespace>LoperFamilyTreeBuilder.ImportExport</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
+  </ItemGroup>
 </Project>
