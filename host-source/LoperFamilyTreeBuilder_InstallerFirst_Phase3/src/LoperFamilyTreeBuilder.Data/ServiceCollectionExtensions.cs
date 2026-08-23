@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<GedcomDuplicateAnalyzer>();
         services.AddSingleton<GedcomConsistencyAuditor>();
         services.AddScoped<GedcomImportPreviewService>();
+        services.AddScoped<GedcomReviewedImportService>();
 
         return services;
     }

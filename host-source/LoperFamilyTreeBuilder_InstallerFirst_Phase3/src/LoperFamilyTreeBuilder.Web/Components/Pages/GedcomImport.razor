@@ -1,6 +1,7 @@
 @page "/gedcom-import"
 @rendermode InteractiveServer
 @inject GedcomImportPreviewService PreviewService
+@inject GedcomReviewedImportService ImportService
 
 <PageTitle>GEDCOM Import Preview - Loper Family Tree Builder</PageTitle>
 
@@ -57,7 +58,30 @@
         }
         else
         {
-            <div class="alert alert-success">Validation passed. The accepted tree is unchanged. Review and import controls will be enabled only after backup/audit integration is verified.</div>
+            <div class="alert alert-success">Validation passed. The accepted tree is still unchanged.</div>
+            @if (_preview.VerificationErrorCount == 0)
+            {
+                <div class="section-title">
+                    <h2>Reviewed import</h2>
+                    <p>A verified database backup is created before one all-or-nothing transaction. Exact duplicates are linked to the existing person; possible duplicates are not imported.</p>
+                </div>
+                <p><strong>File fingerprint:</strong> @_sha256</p>
+                <label class="form-check">
+                    <InputCheckbox @bind-Value="_includeProtected" />
+                    Include protected/uncertain people in the private local tree. They remain excluded from automatic research.
+                </label>
+                <p>To approve this exact import, type <strong>IMPORT @_preview.NewPersonCount PEOPLE</strong>.</p>
+                <InputText class="form-control" @bind-Value="_confirmation" />
+                <button class="btn btn-primary" @onclick="ImportAsync" disabled="@_running">Create backup and import reviewed people</button>
+                @if (_result is not null)
+                {
+                    <div class="alert alert-success">Imported @_result.PeopleImported people and @_result.RelationshipsImported parent-child relationships. The backup was verified and the action was audited.</div>
+                }
+            }
+            else
+            {
+                <div class="alert alert-error">Import remains blocked until the timeline and relationship errors are corrected.</div>
+            }
         }
     </section>
 }
@@ -66,19 +90,47 @@
     private const long MaximumGedcomBytes = 25 * 1024 * 1024;
     private GedcomImportPreview? _preview;
     private bool _running;
+    private bool _includeProtected;
     private string _error = string.Empty;
+    private string _confirmation = string.Empty;
+    private string _sha256 = string.Empty;
+    private byte[]? _gedcomBytes;
+    private ReviewedGedcomImportResult? _result;
 
     private async Task AnalyzeAsync(InputFileChangeEventArgs args)
     {
         _running = true;
         _error = string.Empty;
         _preview = null;
+        _result = null;
+        _gedcomBytes = null;
         try
         {
             if (args.File.Size > MaximumGedcomBytes)
                 throw new InvalidOperationException("GEDCOM files over 25 MB require the offline importer.");
             await using var stream = args.File.OpenReadStream(MaximumGedcomBytes);
-            _preview = await PreviewService.PreviewAsync(stream);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            _gedcomBytes = memory.ToArray();
+            _sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(_gedcomBytes));
+            await using var previewStream = new MemoryStream(_gedcomBytes, writable: false);
+            _preview = await PreviewService.PreviewAsync(previewStream);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_preview is null || _gedcomBytes is null) return;
+        _running = true;
+        _error = string.Empty;
+        _result = null;
+        try
+        {
+            _result = await ImportService.ImportAsync(_gedcomBytes,
+                new ReviewedGedcomImportRequest(_sha256, _preview.NewPersonCount,
+                    "Local Reviewed GEDCOM Import", _confirmation, _includeProtected));
         }
         catch (Exception ex) { _error = ex.Message; }
         finally { _running = false; }
