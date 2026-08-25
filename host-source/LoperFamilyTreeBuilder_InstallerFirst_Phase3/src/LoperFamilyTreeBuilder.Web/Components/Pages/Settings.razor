@@ -1,0 +1,47 @@
+@page "/settings"
+@rendermode InteractiveServer
+@inject AiConfigurationStore Store
+@inject IHttpClientFactory Clients
+
+<PageTitle>Settings - Loper Family Tree Builder</PageTitle>
+<div class="page-header"><div><h1>Settings</h1><p>Local AI is the default. No cloud key is required or stored.</p></div></div>
+
+<section class="page-card">
+    <div class="section-title"><h2>Local Ollama</h2><p>Used for private and routine extraction on this computer.</p></div>
+    <div class="form-grid">
+        <div><label>Endpoint</label><InputText @bind-Value="_configuration.OllamaEndpoint" /></div>
+        <div><label>Model</label><InputText @bind-Value="_configuration.OllamaModel" /></div>
+    </div>
+    <div class="form-actions">
+        <button class="primary-action" @onclick="SaveAndTestAsync" disabled="@_testing">@(_testing ? "Testing..." : "Save and Test")</button>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(_message)) { <div class="@(_healthy ? "alert alert-success" : "alert alert-error")">@_message</div> }
+</section>
+
+@code {
+    private AiConfiguration _configuration = new();
+    private bool _testing;
+    private bool _healthy;
+    private string _message = string.Empty;
+
+    protected override async Task OnInitializedAsync() => _configuration = await Store.LoadAsync();
+
+    private async Task SaveAndTestAsync()
+    {
+        _testing = true; _message = string.Empty; _healthy = false;
+        try
+        {
+            await Store.SaveAsync(_configuration);
+            var http = Clients.CreateClient();
+            http.BaseAddress = new Uri(_configuration.OllamaEndpoint);
+            http.Timeout = TimeSpan.FromSeconds(30);
+            var health = await ProviderHealthChecker.CheckAsync(new OllamaJsonClient(http, _configuration.OllamaModel));
+            _healthy = health.Available;
+            _message = health.Available
+                ? $"Ollama model {_configuration.OllamaModel} responded successfully in {health.Latency?.TotalMilliseconds:0} ms."
+                : $"Settings saved, but Ollama is not ready: {health.Error}";
+        }
+        catch (Exception ex) { _message = ex.Message; }
+        finally { _testing = false; }
+    }
+}

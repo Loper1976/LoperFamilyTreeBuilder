@@ -1,0 +1,138 @@
+@page "/gedcom-import"
+@rendermode InteractiveServer
+@inject GedcomImportPreviewService PreviewService
+@inject GedcomReviewedImportService ImportService
+
+<PageTitle>GEDCOM Import Preview - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>GEDCOM Import Preview</h1>
+        <p>Analyze people and relationships without changing the accepted family tree.</p>
+    </div>
+</div>
+
+<section class="page-card">
+    <div class="section-title">
+        <h2>Select the private GEDCOM</h2>
+        <p>The file is read in memory for preview. Nothing is imported, researched, or uploaded by this screen.</p>
+    </div>
+    <InputFile OnChange="AnalyzeAsync" accept=".ged,.gedcom" />
+    @if (_running) { <p>Analyzing GEDCOM and checking for duplicates...</p> }
+    @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+</section>
+
+@if (_preview is not null)
+{
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Non-destructive preview</h2>
+            <p>GEDCOM @_preview.GedcomVersion · @_preview.CharacterEncoding</p>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.IndividualCount</div><div class="summary-label">People</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.FamilyCount</div><div class="summary-label">Families</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.SourceCount</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.MediaCount</div><div class="summary-label">Media records</div></div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.ExplicitlyDeceasedCount</div><div class="summary-label">Explicitly deceased</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.HistoricalByAgeCount</div><div class="summary-label">Historical by age</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.ProtectedUncertainCount</div><div class="summary-label">Protected/uncertain</div></div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.NewPersonCount</div><div class="summary-label">Proposed new people</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.PossibleDuplicateCount</div><div class="summary-label">Possible duplicates</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.ExactDuplicateCount</div><div class="summary-label">Exact duplicates</div></div>
+        </div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_preview.VerificationErrorCount</div><div class="summary-label">Timeline/relationship errors</div></div>
+            <div class="summary-card"><div class="summary-value">@_preview.VerificationWarningCount</div><div class="summary-label">Verification warnings</div></div>
+        </div>
+        @if (_preview.Diagnostics.Count > 0)
+        {
+            <div class="alert alert-error">
+                <strong>Import is blocked until these structural problems are resolved:</strong>
+                <ul>@foreach (var diagnostic in _preview.Diagnostics.Take(20)) { <li>@diagnostic</li> }</ul>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-success">Validation passed. The accepted tree is still unchanged.</div>
+            @if (_preview.VerificationErrorCount == 0)
+            {
+                <div class="section-title">
+                    <h2>Reviewed import</h2>
+                    <p>A verified database backup is created before one all-or-nothing transaction. Exact duplicates are linked to the existing person; possible duplicates are not imported.</p>
+                </div>
+                <p><strong>File fingerprint:</strong> @_sha256</p>
+                <label class="form-check">
+                    <InputCheckbox @bind-Value="_includeProtected" />
+                    Include protected/uncertain people in the private local tree. They remain excluded from automatic research.
+                </label>
+                <p>To approve this exact import, type <strong>IMPORT @_preview.NewPersonCount PEOPLE</strong>.</p>
+                <InputText class="form-control" @bind-Value="_confirmation" />
+                <button class="btn btn-primary" @onclick="ImportAsync" disabled="@_running">Create backup and import reviewed people</button>
+                @if (_result is not null)
+                {
+                    <div class="alert alert-success">Imported @_result.PeopleImported people and @_result.RelationshipsImported parent-child relationships. The backup was verified and the action was audited.</div>
+                }
+            }
+            else
+            {
+                <div class="alert alert-error">Import remains blocked until the timeline and relationship errors are corrected.</div>
+            }
+        }
+    </section>
+}
+
+@code {
+    private const long MaximumGedcomBytes = 25 * 1024 * 1024;
+    private GedcomImportPreview? _preview;
+    private bool _running;
+    private bool _includeProtected;
+    private string _error = string.Empty;
+    private string _confirmation = string.Empty;
+    private string _sha256 = string.Empty;
+    private byte[]? _gedcomBytes;
+    private ReviewedGedcomImportResult? _result;
+
+    private async Task AnalyzeAsync(InputFileChangeEventArgs args)
+    {
+        _running = true;
+        _error = string.Empty;
+        _preview = null;
+        _result = null;
+        _gedcomBytes = null;
+        try
+        {
+            if (args.File.Size > MaximumGedcomBytes)
+                throw new InvalidOperationException("GEDCOM files over 25 MB require the offline importer.");
+            await using var stream = args.File.OpenReadStream(MaximumGedcomBytes);
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory);
+            _gedcomBytes = memory.ToArray();
+            _sha256 = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(_gedcomBytes));
+            await using var previewStream = new MemoryStream(_gedcomBytes, writable: false);
+            _preview = await PreviewService.PreviewAsync(previewStream);
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+
+    private async Task ImportAsync()
+    {
+        if (_preview is null || _gedcomBytes is null) return;
+        _running = true;
+        _error = string.Empty;
+        _result = null;
+        try
+        {
+            _result = await ImportService.ImportAsync(_gedcomBytes,
+                new ReviewedGedcomImportRequest(_sha256, _preview.NewPersonCount,
+                    "Local Reviewed GEDCOM Import", _confirmation, _includeProtected));
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+}

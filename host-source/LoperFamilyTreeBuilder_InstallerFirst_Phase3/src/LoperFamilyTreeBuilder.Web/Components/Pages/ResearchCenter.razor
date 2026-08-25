@@ -1,0 +1,221 @@
+@page "/research-center"
+@page "/research-center/{PersonId:guid}"
+@rendermode InteractiveServer
+@inject IResearchCenterService Center
+@inject IHostPersonReader People
+@inject ResearchCommandService Commands
+@inject IResearchStore Store
+@inject NaraCatalogSearchProvider Nara
+@inject LibraryOfCongressSearchProvider LibraryOfCongress
+
+<PageTitle>Research Center - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header"><div><h1>Research Center</h1><p>Proposed findings remain separate from the accepted family tree.</p></div></div>
+
+@if (!PersonId.HasValue)
+{
+    <section class="page-card"><p>Open a person profile and choose <strong>Research This Person</strong>.</p></section>
+    <section class="page-card">
+        <div class="section-title">
+            <h2>Search public archives and libraries</h2>
+            <p>Use only names and details for deceased people or other public historical research.</p>
+        </div>
+        <div class="filter-actions">
+            <input @bind="_archiveQuery" @bind:event="oninput" placeholder="Name, military unit, place, record type, or keyword" />
+            <button class="primary-action" disabled="@_running" @onclick="SearchNaraAsync">Search NARA</button>
+            <button class="primary-action" disabled="@_running" @onclick="SearchLocAsync">Search Library of Congress</button>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_error)) { <div class="alert alert-error">@_error</div> }
+    </section>
+    @if (_candidates.Count > 0)
+    {
+        <section class="page-card">
+            <div class="section-title"><h2>Archive and library candidates</h2><p>Candidates are not evidence until reviewed and cited.</p></div>
+            @foreach (var candidate in _candidates)
+            {
+                <div class="queue-row">
+                    <div>
+                        <a href="@candidate.Url" target="_blank" rel="noopener noreferrer"><strong>@candidate.Title</strong></a>
+                        <div class="muted">@candidate.Repository · @candidate.RecordType</div>
+                        @if (!string.IsNullOrWhiteSpace(candidate.Summary)) { <div>@candidate.Summary</div> }
+                    </div>
+                    <strong>@candidate.MatchHint.ToString("0")</strong>
+                </div>
+            }
+        </section>
+    }
+    <section class="page-card">
+        <div class="section-title"><h2>Additional genealogy resources</h2><p>These sites do not provide a current supported public API, so searches open safely in a new tab.</p></div>
+        <div class="queue-row"><div><a href="@NyplSearchUrl" target="_blank" rel="noopener noreferrer"><strong>New York Public Library</strong></a><div class="muted">Search NYPL Digital Collections. Its former public API was retired August 1, 2026.</div></div></div>
+        <div class="queue-row"><div><a href="https://www.researchguides.net/immigration/index.htm" target="_blank" rel="noopener noreferrer"><strong>Immigration and passenger-list research guide</strong></a><div class="muted">A curated guide to ports, passenger lists, naturalization, and immigration records.</div></div></div>
+        <div class="queue-row"><div><a href="@AccessGenealogySearchUrl" target="_blank" rel="noopener noreferrer"><strong>AccessGenealogy</strong></a><div class="muted">Site search; its individual genealogy databases may need to be searched separately.</div></div></div>
+    </section>
+}
+else if (_loading)
+{
+    <section class="page-card">Loading research workspace...</section>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-error">@_error</div>
+}
+else if (_summary is not null)
+{
+    <section class="page-card">
+        <div class="section-title"><h2>@_summary.DisplayName</h2><p>Stable person ID: @PersonId</p></div>
+        <div class="summary-grid">
+            <div class="summary-card"><div class="summary-value">@_summary.SourceCount</div><div class="summary-label">Sources</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.OpenClaimCount</div><div class="summary-label">Open findings</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.ConflictCount</div><div class="summary-label">Conflicts</div></div>
+            <div class="summary-card"><div class="summary-value">@_summary.OpenTaskCount</div><div class="summary-label">Tasks</div></div>
+        </div>
+        <button class="primary-action" disabled="@_running" @onclick="StartAsync">@(_running ? "Planning..." : "Research This Person")</button>
+        @if (!string.IsNullOrWhiteSpace(_status)) { <div class="alert alert-success">@_status</div> }
+    </section>
+
+    @if (_candidates.Count > 0)
+    {
+        <section class="page-card">
+            <div class="section-title">
+                <h2>Archive and library candidates</h2>
+                <p>Candidates are not evidence until reviewed and cited.</p>
+            </div>
+            @foreach (var candidate in _candidates)
+            {
+                <div class="queue-row">
+                    <div>
+                        @if (candidate.Url is not null)
+                        {
+                            <a href="@candidate.Url" target="_blank" rel="noopener noreferrer"><strong>@candidate.Title</strong></a>
+                        }
+                        else
+                        {
+                            <strong>@candidate.Title</strong>
+                        }
+                        <div class="muted">@candidate.Repository · @candidate.RecordType</div>
+                        @if (!string.IsNullOrWhiteSpace(candidate.Summary))
+                        {
+                            <div>@candidate.Summary</div>
+                        }
+                    </div>
+                    <strong>@candidate.MatchHint.ToString("0")</strong>
+                </div>
+            }
+        </section>
+    }
+
+    <section class="page-card"><div class="section-title"><h2>Research queue</h2></div>
+        @if (_summary.Tasks.Count == 0) { <p class="muted">No open research tasks.</p> }
+        else { @foreach (var task in _summary.Tasks) { <div class="queue-row"><span>@task.Question</span><strong>@task.PriorityScore.ToString("0")</strong></div> } }
+    </section>
+}
+
+@code {
+    [Parameter] public Guid? PersonId { get; set; }
+    [SupplyParameterFromQuery(Name = "start")] public bool StartRequested { get; set; }
+    private ResearchCenterSummary? _summary;
+    private bool _loading = true;
+    private bool _running;
+    private string _error = string.Empty;
+    private string _status = string.Empty;
+    private string _archiveQuery = string.Empty;
+    private IReadOnlyList<SourceSearchResult> _candidates = [];
+
+    private string NyplSearchUrl =>
+        $"https://digitalcollections.nypl.org/search/index?keywords={Uri.EscapeDataString(_archiveQuery.Trim())}";
+    private string AccessGenealogySearchUrl =>
+        $"https://accessgenealogy.com/?s={Uri.EscapeDataString(_archiveQuery.Trim())}";
+
+    private async Task SearchNaraAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_archiveQuery)) return;
+        _running = true;
+        _error = string.Empty;
+        try
+        {
+            _candidates = await Nara.SearchAsync(new SourceSearchQuery(
+                Guid.Empty,
+                _archiveQuery.Trim(),
+                "National Archives Catalog",
+                null,
+                null,
+                null,
+                PrivacyClass.PublicHistorical));
+        }
+        catch (Exception ex)
+        {
+            _error = $"National Archives search is temporarily unavailable: {ex.Message}";
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    private async Task SearchLocAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_archiveQuery)) return;
+        _running = true;
+        _error = string.Empty;
+        try
+        {
+            _candidates = await LibraryOfCongress.SearchAsync(new SourceSearchQuery(
+                Guid.Empty,
+                _archiveQuery.Trim(),
+                "Library of Congress",
+                null,
+                null,
+                null,
+                PrivacyClass.PublicHistorical));
+        }
+        catch (Exception ex)
+        {
+            _error = $"Library of Congress search is temporarily unavailable: {ex.Message}";
+        }
+        finally
+        {
+            _running = false;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!PersonId.HasValue) { _loading = false; return; }
+        try
+        {
+            await RefreshAsync();
+            if (StartRequested && _summary?.Tasks.Count == 0) await StartAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _loading = false; }
+    }
+
+    private async Task StartAsync()
+    {
+        if (!PersonId.HasValue) return;
+        _running = true; _error = string.Empty; _status = string.Empty;
+        try
+        {
+            var person = await People.GetPersonAsync(PersonId.Value) ?? throw new InvalidOperationException("Person not found.");
+            var profile = new PersonResearchProfile(person.StablePersonId, person.DisplayName,
+                person.BirthDate, person.BirthPlace, person.DeathDate, person.DeathPlace,
+                false, false, [], []);
+            var privacy = person.DeathDate.HasValue ? PrivacyClass.PublicHistorical : PrivacyClass.LivingPersonSensitive;
+            var result = await Commands.ResearchThisPersonAsync(new StartResearchRequest(profile, privacy));
+            foreach (var task in result.Plan.Tasks) await Store.SaveResearchTaskAsync(task);
+            _candidates = result.Run.Executions
+                .SelectMany(execution => execution.Results)
+                .GroupBy(candidate => candidate.Url?.ToString() ?? candidate.Title)
+                .Select(group => group.First())
+                .OrderByDescending(candidate => candidate.MatchHint)
+                .Take(25)
+                .ToArray();
+            _status = $"Created {result.Plan.Tasks.Count} proposal-first research tasks and found {_candidates.Count} archive and library candidates. No accepted-tree facts were changed.";
+            await RefreshAsync();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _running = false; }
+    }
+
+    private async Task RefreshAsync() => _summary = await Center.GetSummaryAsync(PersonId!.Value);
+}

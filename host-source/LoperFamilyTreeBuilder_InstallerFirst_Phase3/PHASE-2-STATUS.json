@@ -1,0 +1,27 @@
+{
+  "project": "Loper Family Tree Builder",
+  "phase": "Installer-First Phase 2",
+  "date": "2026-08-07",
+  "completed_foundation": [
+    "first-run native storage configuration",
+    "archive and backup folder validation with timeout",
+    "local configuration persistence",
+    "EF Core 10 SQL Server data foundation",
+    "versioned initial migration",
+    "stable GUID person identifiers",
+    "protected Robert J. Loper Legacy Number domain rule",
+    "family branches",
+    "parent-child relationships",
+    "preservation unit tests",
+    "single-instance launcher behavior",
+    "single-EXE Burn bundle authoring"
+  ],
+  "not_yet_complete": [
+    "LocalDB prerequisite bundling",
+    "compiled Windows installer",
+    "identity/permissions",
+    "audit trail",
+    "high-volume People UI",
+    "existing archive migration"
+  ]
+}

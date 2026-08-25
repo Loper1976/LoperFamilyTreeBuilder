@@ -1,0 +1,32 @@
+{
+  "project": "Loper Family Tree Builder",
+  "phase": "Installer-First Phase 3",
+  "date": "2026-08-07",
+  "added": [
+    "automatic LocalDB payload preparation in Windows cloud build",
+    "LocalDB Burn prerequisite package",
+    "launcher LocalDB detection",
+    "audit event entity and migration",
+    "server-side high-volume People query service",
+    "People list with search/filter/pagination",
+    "Add Person workflow",
+    "duplicate candidate warning without automatic merge",
+    "duplicate Legacy Number rejection",
+    "dashboard aggregate counts",
+    "baseline Loper and Beadle branch initialization",
+    "migration discovery attribute repair for Phase 2 migration"
+  ],
+  "still_pending": [
+    "compiled and Windows-tested setup EXE",
+    "ASP.NET Core Identity",
+    "full person profile",
+    "edit person audit history",
+    "relationships UI",
+    "archive migration",
+    "sources/documents/photos",
+    "GEDCOM staging/import",
+    "medical module",
+    "backup/restore engine",
+    "code signing and updater"
+  ]
+}

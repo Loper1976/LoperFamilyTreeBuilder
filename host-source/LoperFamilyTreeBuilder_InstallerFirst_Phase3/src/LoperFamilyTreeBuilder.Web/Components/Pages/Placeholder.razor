@@ -1,0 +1,69 @@
+@page "/import-review"
+@page "/gedcom-validation"
+@page "/documents"
+@page "/photos"
+@page "/sources"
+@page "/medical"
+@page "/medical-search"
+@page "/family-health-patterns"
+@page "/medical-pedigree"
+@page "/family-tree"
+@page "/pedigree"
+@page "/descendants"
+@page "/reports"
+@page "/cemeteries"
+@page "/military"
+@page "/research-tasks"
+@page "/maps"
+@page "/administration"
+@page "/users"
+@page "/backup"
+
+<PageTitle>Loper Family Tree Builder</PageTitle>
+
+<div class="page-card">
+    <h1>@Title</h1>
+    <p>This module is reserved in the new application shell and will be implemented in its scheduled phase.</p>
+</div>
+
+@code {
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private string Title
+    {
+        get
+        {
+            var segment = Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/');
+            if (string.IsNullOrWhiteSpace(segment))
+                return "Dashboard";
+
+            return segment switch
+            {
+                "people" => "People",
+                "gedcom-import" => "GEDCOM Import",
+                "import-review" => "Import Review / Audit",
+                "gedcom-validation" => "GEDCOM Validation",
+                "documents" => "Documents",
+                "photos" => "Photos",
+                "sources" => "Sources",
+                "medical" => "Medical Dashboard",
+                "medical-search" => "Medical Search",
+                "family-health-patterns" => "Family Health Patterns",
+                "medical-pedigree" => "Medical Pedigree / Genogram",
+                "family-tree" => "Family Tree",
+                "pedigree" => "Pedigree Charts",
+                "descendants" => "Descendant Charts",
+                "reports" => "Reports",
+                "cemeteries" => "Cemeteries",
+                "military" => "Military",
+                "research-tasks" => "Research Tasks",
+                "maps" => "Maps",
+                "administration" => "Administration",
+                "users" => "Users and Permissions",
+                "backup" => "Backup / Restore",
+                "settings" => "Settings",
+                _ => "Loper Family Tree Builder"
+            };
+        }
+    }
+}

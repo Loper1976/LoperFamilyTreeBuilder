@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>LoperFamilyTreeBuilder.Web</AssemblyName>
+    <RootNamespace>LoperFamilyTreeBuilder.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Data\LoperFamilyTreeBuilder.Data.csproj" />
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Infrastructure\LoperFamilyTreeBuilder.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

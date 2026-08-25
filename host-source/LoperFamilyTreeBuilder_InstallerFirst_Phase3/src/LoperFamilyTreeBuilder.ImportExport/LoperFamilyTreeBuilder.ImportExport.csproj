@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>LoperFamilyTreeBuilder.ImportExport</AssemblyName>
+    <RootNamespace>LoperFamilyTreeBuilder.ImportExport</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\LoperFamilyTreeBuilder.Core\LoperFamilyTreeBuilder.Core.csproj" />
+  </ItemGroup>
+</Project>

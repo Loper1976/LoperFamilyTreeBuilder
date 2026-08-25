@@ -1,0 +1,258 @@
+@page "/people/add"
+@rendermode InteractiveServer
+@inject PeopleQueryService PeopleQuery
+@inject PersonCommandService PersonCommand
+@inject FamilyBranchQueryService BranchQuery
+@inject NavigationManager Navigation
+
+<PageTitle>Add Person - Loper Family Tree Builder</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h1>Add Person</h1>
+        <p>Add one person while preserving historical identifiers exactly as entered.</p>
+    </div>
+</div>
+
+<section class="page-card">
+    <EditForm Model="_form" OnValidSubmit="CheckAndSaveAsync">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <div class="form-grid">
+            <div>
+                <label>Given name</label>
+                <InputText @bind-Value="_form.GivenName" />
+            </div>
+
+            <div>
+                <label>Middle name</label>
+                <InputText @bind-Value="_form.MiddleName" />
+            </div>
+
+            <div>
+                <label>Surname</label>
+                <InputText @bind-Value="_form.Surname" />
+            </div>
+
+            <div>
+                <label>Suffix</label>
+                <InputText @bind-Value="_form.Suffix" />
+            </div>
+
+            <div>
+                <label>Birth date</label>
+                <InputDate @bind-Value="_form.BirthDate" />
+            </div>
+
+            <div>
+                <label>Death date</label>
+                <InputDate @bind-Value="_form.DeathDate" />
+            </div>
+
+            <div>
+                <label>Family branch</label>
+                <InputSelect @bind-Value="_form.FamilyBranchId">
+                    <option value="">No branch selected</option>
+                    @foreach (var branch in _branches)
+                    {
+                        <option value="@branch.Id">@branch.Name</option>
+                    }
+                </InputSelect>
+            </div>
+
+            <div>
+                <label>Robert J. Loper Legacy Number</label>
+                <InputText @bind-Value="_form.LegacyNumber"
+                           class="legacy-input" />
+                <small>
+                    Historical text. It will not be trimmed, renumbered,
+                    normalized, or reformatted.
+                </small>
+            </div>
+
+            <div class="living-check">
+                <InputCheckbox @bind-Value="_form.IsLiving" />
+                <label>Living person</label>
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <div class="alert alert-error">@_error</div>
+        }
+
+        @if (_duplicates.Count > 0 && !_duplicateOverride)
+        {
+            <div class="alert alert-warning">
+                <strong>Possible duplicate found.</strong>
+                Review these records before creating another person.
+            </div>
+
+            <div class="duplicate-list">
+                @foreach (var duplicate in _duplicates)
+                {
+                    <div class="duplicate-row">
+                        <div>
+                            <strong>@duplicate.DisplayName</strong>
+                            <div>
+                                Born @FormatDate(duplicate.BirthDate)
+                                @if (!string.IsNullOrEmpty(duplicate.LegacyNumber))
+                                {
+                                    <span>
+                                        | Legacy @duplicate.LegacyNumber
+                                    </span>
+                                }
+                            </div>
+                            <small>@duplicate.Reason</small>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="form-actions">
+                <button type="button"
+                        class="secondary-action"
+                        @onclick="Cancel">
+                    Cancel
+                </button>
+
+                <button type="button"
+                        class="danger-outline"
+                        @onclick="CreateAnywayAsync">
+                    Create Anyway
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="form-actions">
+                <button type="button"
+                        class="secondary-action"
+                        @onclick="Cancel">
+                    Cancel
+                </button>
+
+                <button type="submit"
+                        class="primary-action"
+                        disabled="@_saving">
+                    @(_saving ? "Saving..." : "Save Person")
+                </button>
+            </div>
+        }
+    </EditForm>
+</section>
+
+@code {
+    private void Cancel() => Navigation.NavigateTo("/people");
+
+    private readonly AddPersonFormModel _form = new();
+    private IReadOnlyList<FamilyBranchListItem> _branches = [];
+    private IReadOnlyList<PotentialDuplicatePerson> _duplicates = [];
+    private bool _duplicateOverride;
+    private bool _saving;
+    private string _error = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _branches = await BranchQuery.GetAllAsync();
+    }
+
+    private async Task CheckAndSaveAsync()
+    {
+        _error = string.Empty;
+        _duplicates = [];
+        _duplicateOverride = false;
+
+        var request = ToRequest();
+
+        _duplicates =
+            await PeopleQuery.FindPotentialDuplicatesAsync(request);
+
+        if (_duplicates.Count > 0)
+        {
+            return;
+        }
+
+        await SaveAsync(request);
+    }
+
+    private async Task CreateAnywayAsync()
+    {
+        _duplicateOverride = true;
+        await SaveAsync(ToRequest());
+    }
+
+    private async Task SaveAsync(CreatePersonRequest request)
+    {
+        _saving = true;
+        _error = string.Empty;
+
+        try
+        {
+            var personId = await PersonCommand.CreateAsync(
+                request,
+                actor: "Local Application");
+
+            Navigation.NavigateTo($"/people/{personId}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _duplicateOverride = false;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private CreatePersonRequest ToRequest()
+    {
+        return new CreatePersonRequest
+        {
+            GivenName = _form.GivenName,
+            MiddleName = _form.MiddleName,
+            Surname = _form.Surname,
+            Suffix = _form.Suffix,
+            BirthDate = _form.BirthDate,
+            DeathDate = _form.DeathDate,
+            IsLiving = _form.DeathDate.HasValue
+                ? false
+                : _form.IsLiving,
+            LegacyNumber = _form.LegacyNumber,
+            FamilyBranchId = _form.FamilyBranchId
+        };
+    }
+
+    private static string FormatDate(DateOnly? date)
+    {
+        return date?.ToString("MM/dd/yyyy") ?? "unknown";
+    }
+
+    private sealed class AddPersonFormModel
+    {
+        [MaxLength(200)]
+        public string GivenName { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string MiddleName { get; set; } = string.Empty;
+
+        [MaxLength(200)]
+        public string Surname { get; set; } = string.Empty;
+
+        [MaxLength(100)]
+        public string Suffix { get; set; } = string.Empty;
+
+        public DateOnly? BirthDate { get; set; }
+
+        public DateOnly? DeathDate { get; set; }
+
+        public bool IsLiving { get; set; } = true;
+
+        [MaxLength(255)]
+        public string LegacyNumber { get; set; } = string.Empty;
+
+        public Guid? FamilyBranchId { get; set; }
+    }
+}

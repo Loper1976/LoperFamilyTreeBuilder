@@ -1,0 +1,175 @@
+using System.Text;
+using LoperFamilyTreeBuilder.ImportExport.Gedcom;
+
+namespace LoperFamilyTreeBuilder.Tests;
+
+public sealed class GedcomParserTests
+{
+    [Fact]
+    public async Task ParsesBurialDateAndPlaceWithoutTreatingItAsGraveCoordinates()
+    {
+        const string text = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @I1@ INDI
+            1 NAME Ada /Example/
+            1 DEAT
+            2 DATE 1 JAN 1900
+            1 BURI
+            2 DATE 3 JAN 1900
+            2 PLAC Example Cemetery, Example County, Texas
+            0 TRLR
+            """;
+
+        await using var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text));
+        var document = await new GedcomParser().ParseAsync(stream, new DateOnly(2026, 1, 1));
+
+        var person = Assert.Single(document.Individuals);
+        Assert.Equal("3 JAN 1900", person.BurialDate?.OriginalText);
+        Assert.Equal("Example Cemetery, Example County, Texas", person.BurialPlace);
+    }
+
+    [Fact]
+    public async Task ParsesPeopleFamiliesAndPrivacyWithoutPromotingAnything()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @I1@ INDI
+            1 NAME Historical /Example/
+            2 GIVN Historical
+            2 SURN Example
+            1 SEX M
+            1 BIRT
+            2 DATE 12 MAR 1900
+            2 PLAC Example County
+            0 @I2@ INDI
+            1 NAME Deceased /Example/
+            1 DEAT Y
+            2 DATE ABT 1980
+            0 @I3@ INDI
+            1 NAME Protected /Example/
+            1 BIRT
+            2 DATE 1990
+            0 @F1@ FAM
+            1 HUSB @I1@
+            1 WIFE @I2@
+            1 CHIL @I3@
+            1 MARR
+            2 DATE 1920
+            2 PLAC Example City
+            0 @S1@ SOUR
+            1 TITL Fictional source
+            0 TRLR
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+
+        var document = await new GedcomParser().ParseAsync(stream, new DateOnly(2026, 8, 23));
+
+        Assert.True(document.IsStructurallyValid);
+        Assert.Equal("5.5.1", document.Version);
+        Assert.Equal("UTF-8", document.CharacterEncoding);
+        Assert.Equal(3, document.Individuals.Count);
+        Assert.Single(document.Families);
+        Assert.Equal(1, document.SourceRecordCount);
+        Assert.Equal(2, document.ResearchEligibleCount);
+        Assert.Equal(GedcomPrivacyClassification.HistoricalByAge, document.Individuals[0].Privacy);
+        Assert.Equal(GedcomPrivacyClassification.ExplicitlyDeceased, document.Individuals[1].Privacy);
+        Assert.Equal(GedcomPrivacyClassification.ProtectedUncertain, document.Individuals[2].Privacy);
+        Assert.Equal("@I3@", document.Families[0].ChildIds.Single());
+    }
+
+    [Fact]
+    public async Task ReportsBrokenReferencesAndMissingTrailer()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @F1@ FAM
+            1 CHIL @MISSING@
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+
+        var document = await new GedcomParser().ParseAsync(stream);
+
+        Assert.False(document.IsStructurallyValid);
+        Assert.Contains(document.Diagnostics, x => x.Contains("trailer", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(document.Diagnostics, x => x.Contains("missing individual", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task PreviewSeparatesExactPossibleAndNewPeopleWithoutNamesInOutput()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @I1@ INDI
+            1 NAME Exact /Example/
+            1 BIRT
+            2 DATE 1 JAN 1900
+            0 @I2@ INDI
+            1 NAME Possible /Example/
+            0 @I3@ INDI
+            1 NAME New /Example/
+            0 TRLR
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+        var document = await new GedcomParser().ParseAsync(stream, new DateOnly(2026, 8, 23));
+        var accepted = new[]
+        {
+            new AcceptedPersonMatchInput(Guid.NewGuid(), "Exact", "Example", new DateOnly(1900, 1, 1)),
+            new AcceptedPersonMatchInput(Guid.NewGuid(), "Possible", "Example", null)
+        };
+
+        var preview = new GedcomDuplicateAnalyzer().CreatePreview(document, accepted);
+
+        Assert.Equal(1, preview.ExactDuplicateCount);
+        Assert.Equal(1, preview.PossibleDuplicateCount);
+        Assert.Equal(1, preview.NewPersonCount);
+        Assert.DoesNotContain(preview.Candidates, candidate =>
+            candidate.GetType().GetProperties().Any(property => property.Name.Contains("Name")));
+    }
+
+    [Fact]
+    public async Task ConsistencyAuditFindsImpossibleTimelinesWithoutChangingRecords()
+    {
+        const string fixture = """
+            0 HEAD
+            1 GEDC
+            2 VERS 5.5.1
+            1 CHAR UTF-8
+            0 @P1@ INDI
+            1 NAME Parent /Example/
+            1 BIRT
+            2 DATE 1900
+            1 DEAT
+            2 DATE 1910
+            0 @C1@ INDI
+            1 NAME Child /Example/
+            1 BIRT
+            2 DATE 1920
+            1 DEAT
+            2 DATE 1919
+            0 @F1@ FAM
+            1 HUSB @P1@
+            1 CHIL @C1@
+            0 TRLR
+            """;
+        await using var stream = new MemoryStream(Encoding.UTF8.GetBytes(fixture));
+        var document = await new GedcomParser().ParseAsync(stream);
+
+        var report = new GedcomConsistencyAuditor().Audit(document);
+
+        Assert.Contains(report.Issues, x => x.Code == "DEATH_BEFORE_BIRTH");
+        Assert.Contains(report.Issues, x => x.Code == "CHILD_AFTER_PARENT_DEATH");
+        Assert.Equal(2, document.Individuals.Count);
+    }
+}
